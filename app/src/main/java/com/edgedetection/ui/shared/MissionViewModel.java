@@ -1,17 +1,20 @@
 package com.edgedetection.ui.shared;
 
+import android.app.Application;
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
 
 import com.edgedetection.domain.geo.ElevationProvider;
 import com.edgedetection.domain.mission.DronePosition;
 import com.edgedetection.domain.mission.GeoAnchor;
-import com.edgedetection.domain.mission.InMemoryMissionRepository;
 import com.edgedetection.domain.mission.Mission;
 import com.edgedetection.domain.mission.MissionRepository;
 import com.edgedetection.domain.mission.Waypoint;
 import com.edgedetection.domain.mission.WaypointAction;
+import com.edgedetection.domain.mission.persistence.AppDatabase;
+import com.edgedetection.domain.mission.persistence.RoomMissionRepository;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,14 +26,33 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MissionViewModel extends ViewModel {
+public class MissionViewModel extends AndroidViewModel {
 
     private final MissionRepository repository;
     private final MutableLiveData<Mission> missionData;
+    private final MutableLiveData<List<Mission>> allMissions = new MutableLiveData<>(new ArrayList<>());
     private final Executor executor;
 
-    public MissionViewModel() {
-        this(new InMemoryMissionRepository(null));
+    public MissionViewModel(@NonNull Application application) {
+        super(application);
+        this.repository = new RoomMissionRepository(AppDatabase.getDatabase(application).missionDao());
+        this.missionData = new MutableLiveData<>(new Mission(
+                UUID.randomUUID().toString(), "Новый маршрут",
+                Collections.emptyList(), Collections.emptyList(),
+                null, null, null, null));
+        this.executor = Executors.newSingleThreadExecutor();
+        loadAllMissions();
+    }
+
+    public LiveData<List<Mission>> getAllMissions() {
+        return allMissions;
+    }
+
+    private void loadAllMissions() {
+        executor.execute(() -> {
+            List<Mission> missions = repository.getAllMissions();
+            allMissions.postValue(missions);
+        });
     }
 
     // --- Realtime drone position for AR ---
@@ -43,15 +65,7 @@ public class MissionViewModel extends ViewModel {
     public void setDronePosition(DronePosition pos) {
         dronePosition.setValue(pos);
     }
-    public MissionViewModel(MissionRepository repository) {
-        this.repository = repository;
-        this.missionData = new MutableLiveData<>(new Mission(
-                UUID.randomUUID().toString(), "Unnamed Mission",
-                Collections.emptyList(), Collections.emptyList(),
-                null, null, null, null));
-        this.executor = Executors.newSingleThreadExecutor();
-    }
-
+    
     public LiveData<Mission> getMissionState() {
         return missionData;
     }
@@ -94,7 +108,31 @@ public class MissionViewModel extends ViewModel {
                     .withShotDownCount(0));
         } else if (intent instanceof MissionIntent.ShotDownDrone) {
             update(m -> m.withShotDownCount(m.shotDownCount + 1));
+        } else if (intent instanceof MissionIntent.LoadMission) {
+            loadMission(((MissionIntent.LoadMission) intent).id);
+        } else if (intent instanceof MissionIntent.DeleteMission) {
+            deleteMission(((MissionIntent.DeleteMission) intent).id);
         }
+    }
+
+    private void loadMission(String id) {
+        executor.execute(() -> {
+            Mission m = repository.load(id);
+            if (m != null) {
+                missionData.postValue(m);
+            }
+        });
+    }
+
+    private void deleteMission(String id) {
+        executor.execute(() -> {
+            repository.delete(id);
+            loadAllMissions();
+            Mission current = missionData.getValue();
+            if (current != null && current.id.equals(id)) {
+                clearMission();
+            }
+        });
     }
 
     // --- Waypoints ---
@@ -244,15 +282,11 @@ public class MissionViewModel extends ViewModel {
             return m.withGeoAnchors(list);
         });
     }
-    private void clearMission() {
-        update(m -> new Mission(m.id, m.name,
-                Collections.emptyList(), Collections.emptyList(),
-                m.geoFence, null, null, null, m.droneCount,m.shotDownCount, m.simState));
-    }
 
     private void setDroneCount(int count) {
         update(m -> m.withDroneCount(count));
     }
+
     // --- Terrain ---
 
     private void applyTerrain(MissionIntent.ApplyTerrainHeights intent) {
@@ -274,7 +308,10 @@ public class MissionViewModel extends ViewModel {
 
             Mission updated = current.withWaypoints(wps).withGeoAnchors(anchors);
             missionData.postValue(updated);
-            repository.save(updated);
+            executor.execute(() -> {
+                repository.save(updated);
+                loadAllMissions();
+            });
         });
     }
 
@@ -285,7 +322,18 @@ public class MissionViewModel extends ViewModel {
         if (current == null) return;
         Mission next = transform.apply(current);
         missionData.setValue(next);
-        repository.save(next);
+        executor.execute(() -> {
+            repository.save(next);
+            // Reload list if name might have changed or it's a new mission
+            List<Mission> missions = repository.getAllMissions();
+            allMissions.postValue(missions);
+        });
+    }
+
+    private void clearMission() {
+        update(m -> new Mission(UUID.randomUUID().toString(), "Новый маршрут",
+                Collections.emptyList(), Collections.emptyList(),
+                m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState));
     }
 
     public interface MissionTransform {

@@ -30,19 +30,13 @@ public class InMemoryMissionRepository implements MissionRepository {
     }
 
     @Override
-    public void save(Mission mission) {
-        missionData.postValue(mission);
+    public List<Mission> getAllMissions() {
+        Mission m = missionData.getValue();
+        return m != null ? Collections.singletonList(m) : Collections.emptyList();
     }
 
-    /** Atomic update из ViewModel */
-    public void update(MissionTransform transform) {
-        Mission current = missionData.getValue();
-        if (current != null) {
-            missionData.postValue(transform.apply(current));
-        }
-    }
-
-    public interface MissionTransform {
-        Mission apply(Mission mission);
+    @Override
+    public void delete(String missionId) {
+        // Not implemented for in-memory
     }
 }

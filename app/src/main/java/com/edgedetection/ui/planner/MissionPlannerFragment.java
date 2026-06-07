@@ -110,6 +110,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private boolean centeredInitially = false;
+    private List<Mission> currentMissions = new ArrayList<>();
     static class SimDrone {
         int index;
         double distanceMeters;
@@ -172,6 +173,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         setupRouteDropdown();
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::onMissionChanged);
+        missionVm.getAllMissions().observe(getViewLifecycleOwner(), this::onMissionsListChanged);
 
         // Кэшируем иконку дрона один раз
         droneBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.drone);
@@ -306,8 +308,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     // === Route Dropdown ===
     private void setupRouteDropdown() {
         dropdownRoutes.setOnItemClickListener((parent, view, position, id) -> {
-            String selected = (String) parent.getItemAtPosition(position);
-            if ("Создать новый".equals(selected)) {
+            if (position == 0) { // "Создать новый"
                 missionVm.dispatch(new MissionIntent.ClearMission());
                 isCreatingRoute = true;
                 btnCreateFinish.setText("Закончить");
@@ -315,6 +316,12 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 rightPanel.setVisibility(View.GONE);
                 selectedWaypointId = null;
                 Toast.makeText(requireContext(), "Тапайте по карте", Toast.LENGTH_SHORT).show();
+            } else {
+                btnSimStop.performClick();
+                Mission selected = currentMissions.get(position - 1);
+                missionVm.dispatch(new MissionIntent.LoadMission(selected.id));
+                isCreatingRoute = false;
+                btnCreateFinish.setText("Создать");
             }
         });
     }
@@ -589,22 +596,32 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 .width(5f));
     }
 
-    private void updateDropdown(Mission mission) {
+    private void onMissionsListChanged(List<Mission> missions) {
+        this.currentMissions = missions;
+        updateDropdown(missionVm.getMissionState().getValue());
+    }
+
+    private void updateDropdown(Mission activeMission) {
+        if (getContext() == null) return;
         List<String> items = new ArrayList<>();
         items.add("Создать новый");
 
-        if (mission != null && !mission.waypoints.isEmpty()) {
-            items.add("Маршрут 1 (" + mission.waypoints.size() + " точек)");
+        int activeIndex = 0;
+        for (int i = 0; i < currentMissions.size(); i++) {
+            Mission m = currentMissions.get(i);
+            String label = m.name + " (" + m.waypoints.size() + " точек)";
+            items.add(label);
+            if (activeMission != null && m.id.equals(activeMission.id)) {
+                activeIndex = i + 1;
+            }
         }
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
                 android.R.layout.simple_dropdown_item_1line, items);
         dropdownRoutes.setAdapter(adapter);
 
-        if (mission != null && !mission.waypoints.isEmpty()) {
-            dropdownRoutes.setText(items.get(1), false);
-        } else {
-            dropdownRoutes.setText(items.get(0), false);
+        if (activeIndex < items.size()) {
+            dropdownRoutes.setText(items.get(activeIndex), false);
         }
     }
 
@@ -634,7 +651,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                         .build()
         );
         locationComponent.setLocationComponentEnabled(true);
-        locationComponent.setRenderMode(RenderMode.NORMAL);
+        locationComponent.setRenderMode(RenderMode.COMPASS);
     }
 
     private void startLocationUpdatesForCentering() {

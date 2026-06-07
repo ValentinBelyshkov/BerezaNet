@@ -263,19 +263,21 @@ android:layout_height="match_parent">
 <LinearLayout
     android:id="@+id/right_panel"
     android:layout_width="110dp"
-    android:layout_height="0dp"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="6dp"
-    android:background="?attr/colorSurface"
+    android:padding="8dp"
+    android:layout_margin="8dp"
+    android:background="#CC000000"
     android:visibility="gone"
     app:layout_constraintEnd_toEndOf="parent"
-    app:layout_constraintTop_toTopOf="parent"
-    app:layout_constraintBottom_toBottomOf="parent">
+    app:layout_constraintTop_toTopOf="parent">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Точка"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
         android:textAppearance="?attr/textAppearanceSubtitle2" />
 
     <TextView
@@ -283,6 +285,8 @@ android:layout_height="match_parent">
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="Lat"
+        android:textColor="#FFFFFF"
+        android:alpha="0.7"
         android:textAppearance="?attr/textAppearanceCaption" />
 
     <TextView
@@ -290,6 +294,7 @@ android:layout_height="match_parent">
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="—"
+        android:textColor="#FFFFFF"
         android:textSize="12sp" />
 
     <TextView
@@ -297,6 +302,8 @@ android:layout_height="match_parent">
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="Lon"
+        android:textColor="#FFFFFF"
+        android:alpha="0.7"
         android:textAppearance="?attr/textAppearanceCaption" />
 
     <TextView
@@ -304,21 +311,22 @@ android:layout_height="match_parent">
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="—"
+        android:textColor="#FFFFFF"
         android:textSize="12sp" />
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="16dp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_delete_point"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Удалить"
         android:textSize="11sp"
-        android:textColor="?attr/colorError" />
+        android:textColor="#FF5252"
+        app:rippleColor="#44FF5252" />
 </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
