@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+<item
+    android:id="@+id/nav_battle"
+    android:title="Бой"
+    android:icon="@android:drawable/ic_menu_camera" />
+
+
+<item
+    android:id="@+id/nav_settings"
+    android:title="Настройки"
+    android:icon="@android:drawable/ic_menu_preferences" />
+
+<item
+    android:id="@+id/nav_test3d"
+    android:title="3D Test"
+    android:icon="@android:drawable/ic_menu_gallery" />
+
+<item
+    android:id="@+id/nav_planner"
+    android:title="Planner"
+    android:icon="@android:drawable/ic_menu_directions" />
+
+</menu>

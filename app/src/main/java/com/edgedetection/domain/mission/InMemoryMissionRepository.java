@@ -1,0 +1,48 @@
+package com.edgedetection.domain.mission;
+
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+
+import java.util.Collections;
+import java.util.UUID;
+
+public class InMemoryMissionRepository implements MissionRepository {
+    private final MutableLiveData<Mission> missionData;
+
+    public InMemoryMissionRepository(Mission initial) {
+        if (initial == null) {
+            initial = new Mission(UUID.randomUUID().toString(), "New Mission",
+                    Collections.emptyList(), Collections.emptyList(),
+                    null, null, null, null);
+        }
+        this.missionData = new MutableLiveData<>(initial);
+    }
+
+    @Override
+    public LiveData<Mission> observeMission() {
+        return missionData;
+    }
+
+    @Override
+    public Mission load(String missionId) {
+        Mission m = missionData.getValue();
+        return (m != null && m.id.equals(missionId)) ? m : null;
+    }
+
+    @Override
+    public void save(Mission mission) {
+        missionData.postValue(mission);
+    }
+
+    /** Atomic update из ViewModel */
+    public void update(MissionTransform transform) {
+        Mission current = missionData.getValue();
+        if (current != null) {
+            missionData.postValue(transform.apply(current));
+        }
+    }
+
+    public interface MissionTransform {
+        Mission apply(Mission mission);
+    }
+}

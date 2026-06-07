@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+android:layout_width="match_parent"
+android:layout_height="match_parent">
+
+<androidx.camera.view.PreviewView
+    android:id="@+id/preview_view"
+    android:layout_width="1dp"
+    android:layout_height="1dp"
+    android:visibility="invisible" />
+
+<com.edgedetection.opengl.EdgeDetectionGLView
+    android:id="@+id/camera_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+
+<!-- AR overlay: SurfaceView для Filament -->
+<SurfaceView
+    android:id="@+id/ar_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+
+<ImageView
+    android:id="@+id/offscreen_indicator"
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:src="@drawable/ic_arrow"
+    android:visibility="gone"
+    android:layout_gravity="center" />
+
+<TextView
+    android:id="@+id/gps_warning"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="GPS недоступен — последняя известная позиция"
+    android:textColor="#FF4444"
+    android:textSize="14sp"
+    android:background="#CC000000"
+    android:padding="8dp"
+    android:visibility="gone"
+    android:layout_gravity="top|center_horizontal"
+    android:layout_marginTop="24dp" />
+
+</FrameLayout>
