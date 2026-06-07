@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 public class InMemoryMissionRepository implements MissionRepository {
@@ -33,6 +34,11 @@ public class InMemoryMissionRepository implements MissionRepository {
     public List<Mission> getAllMissions() {
         Mission m = missionData.getValue();
         return m != null ? Collections.singletonList(m) : Collections.emptyList();
+    }
+
+    @Override
+    public void save(Mission mission) {
+        missionData.setValue(mission);
     }
 
     @Override
