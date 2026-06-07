@@ -117,4 +117,14 @@ public abstract class MissionIntent {
         public final int droneIndex;
         public ShotDownDrone(int droneIndex) { this.droneIndex = droneIndex; }
     }
+
+    public static final class LoadMission extends MissionIntent {
+        public final String id;
+        public LoadMission(String id) { this.id = id; }
+    }
+
+    public static final class DeleteMission extends MissionIntent {
+        public final String id;
+        public DeleteMission(String id) { this.id = id; }
+    }
 }

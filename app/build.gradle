@@ -67,6 +67,11 @@ dependencies {
     implementation "com.google.android.filament:gltfio-android:$filament_version"
     implementation "com.google.android.filament:filament-utils-android:$filament_version"
     implementation project(':opencv')
+    
+    def room_version = "2.6.1"
+    implementation "androidx.room:room-runtime:$room_version"
+    annotationProcessor "androidx.room:room-compiler:$room_version"
+    implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 // Workaround for JDK image transform issue
