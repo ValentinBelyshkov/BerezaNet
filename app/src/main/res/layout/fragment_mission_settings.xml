@@ -15,72 +15,120 @@
         android:layout_marginBottom="24dp"
         android:textColor="#333333"/>
 
-    <!-- Lives -->
-    <TextView
-        android:id="@+id/tv_lives_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Количество жизней: 3"
-        android:textSize="18sp"
-        android:textColor="#333333"/>
-
-    <SeekBar
-        android:id="@+id/sb_lives"
+    <GridLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="10"
-        android:progress="3"
-        android:layout_marginBottom="16dp"/>
+        android:columnCount="2"
+        android:alignmentMode="alignMargins"
+        android:columnOrderPreserved="false">
 
-    <!-- Speed -->
-    <TextView
-        android:id="@+id/tv_speed_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Скорость (км/ч): 200"
-        android:textSize="18sp"
-        android:textColor="#333333"/>
+        <!-- Lives -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-    <SeekBar
-        android:id="@+id/sb_speed"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="500"
-        android:progress="200"
-        android:layout_marginBottom="16dp"/>
+            <TextView
+                android:id="@+id/tv_lives_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Количество жизней: 3"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
 
-    <!-- Altitude -->
-    <TextView
-        android:id="@+id/tv_altitude_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Высота (м): 100"
-        android:textSize="18sp"
-        android:textColor="#333333"/>
+            <SeekBar
+                android:id="@+id/sb_lives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="10"
+                android:progress="3"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
 
-    <SeekBar
-        android:id="@+id/sb_altitude"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="1000"
-        android:progress="100"
-        android:layout_marginBottom="16dp"/>
+        <!-- Speed -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-    <!-- Spawn Interval -->
-    <TextView
-        android:id="@+id/tv_spawn_interval_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Интервал появления (сек): 90"
-        android:textSize="18sp"
-        android:textColor="#333333"/>
+            <TextView
+                android:id="@+id/tv_speed_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Скорость (км/ч): 200"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
 
-    <SeekBar
-        android:id="@+id/sb_spawn_interval"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="300"
-        android:progress="90"
-        android:layout_marginBottom="16dp"/>
+            <SeekBar
+                android:id="@+id/sb_speed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="500"
+                android:progress="200"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <!-- Altitude -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_altitude_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Высота (м): 100"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
+
+            <SeekBar
+                android:id="@+id/sb_altitude"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="1000"
+                android:progress="100"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <!-- Spawn Interval -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_spawn_interval_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Интервал появления (сек): 90"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
+
+            <SeekBar
+                android:id="@+id/sb_spawn_interval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="300"
+                android:progress="90"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+    </GridLayout>
 
 </LinearLayout>

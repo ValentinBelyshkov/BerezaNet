@@ -31,56 +31,92 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp" />
 
-        <!-- Lower Threshold -->
-        <TextView
-            android:id="@+id/lower_threshold_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Lower: 50"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:layout_marginTop="8dp" />
-
-        <SeekBar
-            android:id="@+id/lower_threshold_bar"
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="50" />
+            android:columnCount="2">
 
-        <!-- Upper Threshold -->
-        <TextView
-            android:id="@+id/upper_threshold_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Upper: 150"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:layout_marginTop="8dp" />
+            <!-- Lower Threshold -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:orientation="vertical"
+                android:padding="8dp">
 
-        <SeekBar
-            android:id="@+id/upper_threshold_bar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="150" />
+                <TextView
+                    android:id="@+id/lower_threshold_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Lower: 50"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
 
-        <!-- Blur -->
-        <TextView
-            android:id="@+id/blur_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Blur: 5"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:layout_marginTop="8dp" />
+                <SeekBar
+                    android:id="@+id/lower_threshold_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="255"
+                    android:progress="50"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
 
-        <SeekBar
-            android:id="@+id/blur_bar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="15"
-            android:progress="5" />
+            <!-- Upper Threshold -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/upper_threshold_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Upper: 150"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+
+                <SeekBar
+                    android:id="@+id/upper_threshold_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="255"
+                    android:progress="150"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- Blur -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_columnWeight="1"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/blur_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Blur: 5"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+
+                <SeekBar
+                    android:id="@+id/blur_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="15"
+                    android:progress="5"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </GridLayout>
 
     </LinearLayout>
 
@@ -111,4 +147,3 @@
         android:padding="8dp" />
 
 </RelativeLayout>
-

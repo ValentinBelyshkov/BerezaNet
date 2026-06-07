@@ -1,6 +1,8 @@
 package com.edgedetection.ui.shared;
 
 import android.app.Application;
+import android.content.Context;
+import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
@@ -33,6 +35,12 @@ public class MissionViewModel extends AndroidViewModel {
     private final MutableLiveData<List<Mission>> allMissions = new MutableLiveData<>(new ArrayList<>());
     private final Executor executor;
 
+    private static final String PREFS_NAME = "mission_settings";
+    private static final String KEY_LIVES = "maxLives";
+    private static final String KEY_SPEED = "speedKmh";
+    private static final String KEY_ALTITUDE = "altitudeMeters";
+    private static final String KEY_SPAWN = "spawnIntervalSeconds";
+
     private static final int[] MISSION_COLORS = {
             0xFFFF0000, // Red
             0xFF00FF00, // Green
@@ -49,11 +57,18 @@ public class MissionViewModel extends AndroidViewModel {
     public MissionViewModel(@NonNull Application application) {
         super(application);
         this.repository = new RoomMissionRepository(AppDatabase.getDatabase(application).missionDao());
+
+        SharedPreferences prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int savedLives = prefs.getInt(KEY_LIVES, 3);
+        float savedSpeed = prefs.getFloat(KEY_SPEED, 200f);
+        float savedAltitude = prefs.getFloat(KEY_ALTITUDE, 100f);
+        float savedSpawn = prefs.getFloat(KEY_SPAWN, 90f);
+
         this.missionData = new MutableLiveData<>(new Mission(
                 UUID.randomUUID().toString(), "Маршрут 1",
                 Collections.emptyList(), Collections.emptyList(),
                 null, null, null, null, 1, 0, Mission.SimulationState.IDLE, MISSION_COLORS[0],
-                3, 200f, 100f, 90f));
+                savedLives, savedSpeed, savedAltitude, savedSpawn));
         this.executor = Executors.newSingleThreadExecutor();
         loadAllMissions();
     }
@@ -134,13 +149,21 @@ public class MissionViewModel extends AndroidViewModel {
         } else if (intent instanceof MissionIntent.DeleteMission) {
             deleteMission(((MissionIntent.DeleteMission) intent).id);
         } else if (intent instanceof MissionIntent.SetMaxLives) {
-            update(m -> m.withMaxLives(((MissionIntent.SetMaxLives) intent).maxLives));
+            int val = ((MissionIntent.SetMaxLives) intent).maxLives;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_LIVES, val).apply();
+            update(m -> m.withMaxLives(val));
         } else if (intent instanceof MissionIntent.SetSpeed) {
-            update(m -> m.withSpeedKmh(((MissionIntent.SetSpeed) intent).speedKmh));
+            float val = ((MissionIntent.SetSpeed) intent).speedKmh;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_SPEED, val).apply();
+            update(m -> m.withSpeedKmh(val));
         } else if (intent instanceof MissionIntent.SetAltitude) {
-            update(m -> m.withAltitudeMeters(((MissionIntent.SetAltitude) intent).altitudeMeters));
+            float val = ((MissionIntent.SetAltitude) intent).altitudeMeters;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_ALTITUDE, val).apply();
+            update(m -> m.withAltitudeMeters(val));
         } else if (intent instanceof MissionIntent.SetSpawnInterval) {
-            update(m -> m.withSpawnIntervalSeconds(((MissionIntent.SetSpawnInterval) intent).spawnIntervalSeconds));
+            float val = ((MissionIntent.SetSpawnInterval) intent).spawnIntervalSeconds;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_SPAWN, val).apply();
+            update(m -> m.withSpawnIntervalSeconds(val));
         }
     }
 
@@ -394,10 +417,16 @@ public class MissionViewModel extends AndroidViewModel {
                 current.geoFence, null, null, null, current.droneCount, 0, Mission.SimulationState.IDLE, color,
                 current.maxLives, current.speedKmh, current.altitudeMeters, current.spawnIntervalSeconds);
         } else {
+            SharedPreferences prefs = getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            int savedLives = prefs.getInt(KEY_LIVES, 3);
+            float savedSpeed = prefs.getFloat(KEY_SPEED, 200f);
+            float savedAltitude = prefs.getFloat(KEY_ALTITUDE, 100f);
+            float savedSpawn = prefs.getFloat(KEY_SPAWN, 90f);
+
             next = new Mission(UUID.randomUUID().toString(), name,
                 Collections.emptyList(), Collections.emptyList(),
                 null, null, null, null, 1, 0, Mission.SimulationState.IDLE, color,
-                3, 200f, 100f, 90f);
+                savedLives, savedSpeed, savedAltitude, savedSpawn);
         }
         missionData.postValue(next);
         executor.execute(() -> {
