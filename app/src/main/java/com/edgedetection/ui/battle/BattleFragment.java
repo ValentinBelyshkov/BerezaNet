@@ -113,6 +113,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private volatile float droneHeading = 0f;
     private volatile boolean simulationActive = false;
     private volatile boolean simulationPaused = false;
+    private volatile boolean hasDronePosition = false;
     private volatile int currentDroneIndex = -1;
     private float lastDroneX, lastDroneY, lastDroneZ;
     private boolean hasRelativePosition = false;
@@ -175,6 +176,8 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         arRenderer.loadModel("models/drone.glb");
         if (!arRenderer.isModelLoaded()) {
             Toast.makeText(requireContext(), "drone.glb failed", Toast.LENGTH_LONG).show();
+        } else {
+            arRenderer.setModelVisible(false);
         }
         arRenderer.setupEnvironmentLighting();
 
@@ -192,6 +195,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
                 setMissionOrigin(mission.originLatitude, mission.originLongitude, alt);
             }
             onSimulationPaused(mission.simState == Mission.SimulationState.PAUSED);
+            this.simulationActive = (mission.simState != Mission.SimulationState.IDLE);
+            if (!this.simulationActive) {
+                this.hasRelativePosition = false;
+            }
         });
 
         missionVm.getDronePosition().observe(getViewLifecycleOwner(), pos -> {
@@ -384,6 +391,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         this.droneAlt = alt;
         this.droneHeading = headingDegrees;
         this.simulationActive = true;
+        this.hasDronePosition = true;
 
         if (!simulationPaused) {
             scheduleFrame();
@@ -449,7 +457,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
         for (Bullet b : bullets) {
             b.update(dt);
-            if (b.active) {
+            if (b.active && simulationActive) {
                 float d = b.distanceTo(lastDroneX, lastDroneY, lastDroneZ);
                 if (d < droneRadius + 0.05f) {
                     b.active = false;
@@ -504,20 +512,22 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
         // 2. Позиция дрона
         double refLat, refLon, refAlt;
+        boolean canLocate = false;
         if (hasUserLocation) {
             refLat = userLat; refLon = userLon; refAlt = userAlt;
+            canLocate = true;
         } else if (hasMissionOrigin) {
             refLat = missionOriginLat; refLon = missionOriginLon; refAlt = missionOriginAlt;
+            canLocate = true;
             if (gpsWarning != null) {
                 gpsWarning.setVisibility(View.VISIBLE);
                 gpsWarning.setText("GPS недоступен — origin миссии");
             }
         } else {
-            Log.w(TAG, "No user location AND no mission origin — drone stays at origin");
-            return;
+            refLat = 0; refLon = 0; refAlt = 0;
         }
 
-        if (simulationActive) {
+        if (canLocate && simulationActive && hasDronePosition) {
             double[] enu = GeoUtils.ecefToEnu(refLat, refLon, refAlt, droneLat, droneLon, droneAlt);
             float[] pos = GeoUtils.enuToFilament(enu);
             lastDroneX = pos[0];
@@ -528,15 +538,19 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             Log.d(TAG, "Drone ENU: E=" + enu[0] + " N=" + enu[1] + " U=" + enu[2]);
             Log.d(TAG, "Drone Filament: " + lastDroneX + ", " + lastDroneY + ", " + lastDroneZ);
 
+            arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
                     (float) Math.toRadians(droneHeading));
-        } else if (hasRelativePosition) {
+        } else if (canLocate && hasRelativePosition) {
+            arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
                     (float) Math.toRadians(droneHeading));
             if (gpsWarning != null && !hasUserLocation) {
                 gpsWarning.setVisibility(View.VISIBLE);
                 gpsWarning.setText("GPS недоступен — последняя известная позиция");
             }
+        } else {
+            arRenderer.setModelVisible(false);
         }
 
         // 3. Баллистика

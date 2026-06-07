@@ -280,6 +280,20 @@ public class Filament3DRenderer {
         return mModelLoaded;
     }
 
+    public void setModelVisible(boolean visible) {
+        if (mAsset == null || mDestroyed || mEngineDestroyed) return;
+        int[] entities = mAsset.getEntities();
+        if (entities != null) {
+            for (int entity : entities) {
+                if (visible) {
+                    mScene.addEntity(entity);
+                } else {
+                    mScene.removeEntity(entity);
+                }
+            }
+        }
+    }
+
     /** Доступ к камере для Fragment */
     public Camera getCamera() {
         return mCamera;
