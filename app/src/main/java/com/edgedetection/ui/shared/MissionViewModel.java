@@ -52,7 +52,8 @@ public class MissionViewModel extends AndroidViewModel {
         this.missionData = new MutableLiveData<>(new Mission(
                 UUID.randomUUID().toString(), "Маршрут 1",
                 Collections.emptyList(), Collections.emptyList(),
-                null, null, null, null, 1, 0, Mission.SimulationState.IDLE, MISSION_COLORS[0]));
+                null, null, null, null, 1, 0, Mission.SimulationState.IDLE, MISSION_COLORS[0],
+                3, 200f, 100f, 90f));
         this.executor = Executors.newSingleThreadExecutor();
         loadAllMissions();
     }
@@ -70,9 +71,14 @@ public class MissionViewModel extends AndroidViewModel {
 
     // --- Realtime drone position for AR ---
     private final MutableLiveData<DronePosition> dronePosition = new MutableLiveData<>();
+    private final MutableLiveData<Integer> hitDroneIndex = new MutableLiveData<>();
 
     public LiveData<DronePosition> getDronePosition() {
         return dronePosition;
+    }
+
+    public LiveData<Integer> getHitDroneIndex() {
+        return hitDroneIndex;
     }
 
     public void setDronePosition(DronePosition pos) {
@@ -120,11 +126,21 @@ public class MissionViewModel extends AndroidViewModel {
             update(m -> m.withSimState(Mission.SimulationState.IDLE)
                     .withShotDownCount(0));
         } else if (intent instanceof MissionIntent.ShotDownDrone) {
+            int index = ((MissionIntent.ShotDownDrone) intent).droneIndex;
+            hitDroneIndex.setValue(index);
             update(m -> m.withShotDownCount(m.shotDownCount + 1));
         } else if (intent instanceof MissionIntent.LoadMission) {
             loadMission(((MissionIntent.LoadMission) intent).id);
         } else if (intent instanceof MissionIntent.DeleteMission) {
             deleteMission(((MissionIntent.DeleteMission) intent).id);
+        } else if (intent instanceof MissionIntent.SetMaxLives) {
+            update(m -> m.withMaxLives(((MissionIntent.SetMaxLives) intent).maxLives));
+        } else if (intent instanceof MissionIntent.SetSpeed) {
+            update(m -> m.withSpeedKmh(((MissionIntent.SetSpeed) intent).speedKmh));
+        } else if (intent instanceof MissionIntent.SetAltitude) {
+            update(m -> m.withAltitudeMeters(((MissionIntent.SetAltitude) intent).altitudeMeters));
+        } else if (intent instanceof MissionIntent.SetSpawnInterval) {
+            update(m -> m.withSpawnIntervalSeconds(((MissionIntent.SetSpawnInterval) intent).spawnIntervalSeconds));
         }
     }
 
@@ -183,7 +199,8 @@ public class MissionViewModel extends AndroidViewModel {
             double[] origin = m.resolveOrigin();
             if (origin == null) {
                 return new Mission(m.id, m.name, list, m.geoAnchors, m.geoFence,
-                        intent.lat, intent.lon, intent.altAmsl, m.droneCount, m.shotDownCount, m.simState, m.color);
+                        intent.lat, intent.lon, intent.altAmsl, m.droneCount, m.shotDownCount, m.simState, m.color,
+                        m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds);
             }
             return m.withWaypoints(list);
         });
@@ -371,11 +388,8 @@ public class MissionViewModel extends AndroidViewModel {
         Mission current = missionData.getValue();
         Mission next = new Mission(UUID.randomUUID().toString(), name,
                 Collections.emptyList(), Collections.emptyList(),
-                (current != null ? current.geoFence : null), null, null, null,
-                (current != null ? current.droneCount : 1),
-                0, Mission.SimulationState.IDLE, color);
-        missionData.postValue(next);
-        // Не сохраняем в репозиторий, пока не добавят первую точку.
+                m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState, color,
+                m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds));
     }
 
     public interface MissionTransform {

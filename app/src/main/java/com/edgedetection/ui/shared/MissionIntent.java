@@ -127,4 +127,24 @@ public abstract class MissionIntent {
         public final String id;
         public DeleteMission(String id) { this.id = id; }
     }
+
+    public static final class SetMaxLives extends MissionIntent {
+        public final int maxLives;
+        public SetMaxLives(int maxLives) { this.maxLives = maxLives; }
+    }
+
+    public static final class SetSpeed extends MissionIntent {
+        public final float speedKmh;
+        public SetSpeed(float speedKmh) { this.speedKmh = speedKmh; }
+    }
+
+    public static final class SetAltitude extends MissionIntent {
+        public final float altitudeMeters;
+        public SetAltitude(float altitudeMeters) { this.altitudeMeters = altitudeMeters; }
+    }
+
+    public static final class SetSpawnInterval extends MissionIntent {
+        public final float spawnIntervalSeconds;
+        public SetSpawnInterval(float spawnIntervalSeconds) { this.spawnIntervalSeconds = spawnIntervalSeconds; }
+    }
 }

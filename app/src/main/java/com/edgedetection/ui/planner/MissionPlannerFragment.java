@@ -126,6 +126,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         double distanceMeters;
         boolean visible = false;
         boolean active = true;
+        int lives;
         double lat, lon, alt;
         double prevLat, prevLon;   // предыдущая позиция для расчёта курса
         double bearing = 0;        // угол в градусах (0° = север, по часовой)
@@ -184,6 +185,19 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::onMissionChanged);
         missionVm.getAllMissions().observe(getViewLifecycleOwner(), this::onMissionsListChanged);
+        missionVm.getHitDroneIndex().observe(getViewLifecycleOwner(), index -> {
+            if (index != null && index >= 0 && index < simDrones.size()) {
+                SimDrone d = simDrones.get(index);
+                if (d.active) {
+                    d.lives--;
+                    if (d.lives <= 0) {
+                        d.active = false;
+                        d.visible = false;
+                        Toast.makeText(requireContext(), "Дрон уничтожен!", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }
+        });
 
         // Кэшируем иконку дрона один раз
         droneBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.drone);
@@ -372,17 +386,20 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private void initSimDrones(Mission m) {
         simDrones.clear();
         Waypoint start = m.waypoints.get(0);
+        double speedMps = m.speedKmh * 1000.0 / 3600.0;
+        double intervalMeters = speedMps * m.spawnIntervalSeconds;
         for (int i = 0; i < m.droneCount; i++) {
             SimDrone d = new SimDrone();
             d.index = i;
-            d.distanceMeters = -i * 5000.0; // 5 км интервал
+            d.distanceMeters = -i * intervalMeters;
             d.visible = false;
             d.active = true;
+            d.lives = m.maxLives;
             d.lat = start.latitude;
             d.lon = start.longitude;
             d.prevLat = start.latitude;
             d.prevLon = start.longitude;
-            d.alt = start.altitudeAmsl;
+            d.alt = m.altitudeMeters; // Используем заданную высоту
             d.bearing = 0;
             simDrones.add(d);
         }
@@ -406,7 +423,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         double dt = (now - lastFrameTime) / 1000.0;
         lastFrameTime = now;
 
-        double speedMps = 200.0 * 1000.0 / 3600.0; // 55.56 м/с
+        double speedMps = mission.speedKmh * 1000.0 / 3600.0;
         double totalLen = calculateRouteLength(mission.waypoints);
 
         for (SimDrone d : simDrones) {
@@ -428,7 +445,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 double[] pos = interpolatePosition(mission.waypoints, d.distanceMeters);
                 d.lat = pos[0];
                 d.lon = pos[1];
-                d.alt = pos[2];
+                d.alt = mission.altitudeMeters; // Используем заданную высоту
 
                 // считаем курс, только если реально сдвинулись (избегаем дрожания при старте)
                 double dx = (d.lon - d.prevLon) * Math.cos(Math.toRadians(d.lat)) * 111320.0;
