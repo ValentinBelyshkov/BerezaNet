@@ -519,15 +519,25 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         if (!calibrationDone && isCalibrating) return;
 
         // 1. Камера из RotationVector
-        // Используем индексы из тикета: Forward East = -R[8], North = -R[9], Up = -R[10]
-        float fBaseE = -rotationMatrix[8];
-        float fBaseN = -rotationMatrix[9];
-        float fBaseU = -rotationMatrix[10];
+        float[] landscapeMatrix = new float[16];
+        // Для Landscape (Landscape Left, 90 deg CCW):
+        // New X = Old Y, New Y = Old -X
+        SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, landscapeMatrix);
 
-        // Для Up вектора (в landscape это Column 0)
-        float uBaseE = rotationMatrix[0];
-        float uBaseN = rotationMatrix[1];
-        float uBaseU = rotationMatrix[2];
+        // В landscapeMatrix:
+        // Столбец 0 (0,4,8) - Вправо (Screen Right) в мировых координатах
+        // Столбец 1 (1,5,9) - Вверх (Screen Up) в мировых координатах
+        // Столбец 2 (2,6,10) - Вперед (Out of screen) в мировых координатах
+
+        // Камера (back) смотрит в -Z экрана
+        float fBaseE = -landscapeMatrix[2];
+        float fBaseN = -landscapeMatrix[6];
+        float fBaseU = -landscapeMatrix[10];
+
+        // Вектор Up для камеры - это Y экрана
+        float uBaseE = landscapeMatrix[1];
+        float uBaseN = landscapeMatrix[5];
+        float uBaseU = landscapeMatrix[9];
 
         // Применяем калибровку азимута (вращение вокруг Up на -initialAzimuth)
         float cosA = (float) Math.cos(-initialAzimuth);
@@ -595,11 +605,11 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
-                    (float) Math.toRadians(droneHeading));
+                    (float) Math.toRadians(droneHeading) + (float) Math.PI);
         } else if (canLocate && hasRelativePosition) {
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
-                    (float) Math.toRadians(droneHeading));
+                    (float) Math.toRadians(droneHeading) + (float) Math.PI);
             if (gpsWarning != null && !hasUserLocation) {
                 gpsWarning.setVisibility(View.VISIBLE);
                 gpsWarning.setText("GPS недоступен — последняя известная позиция");
