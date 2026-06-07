@@ -60,6 +60,8 @@ public final class GeoUtils {
     }
 
     public static float[] enuToFilament(double[] enu) {
-        return new float[]{(float)enu[0], (float)enu[2], (float)enu[1]};
+        // ENU: [East, North, Up]
+        // Filament (right-handed): [East (X), Up (Y), -North (Z)]
+        return new float[]{(float)enu[0], (float)enu[2], -(float)enu[1]};
     }
 }

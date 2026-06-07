@@ -108,6 +108,17 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private SensorManager sensorManager;
     private Sensor rotationVectorSensor;
     private final float[] rotationMatrix = new float[16];
+    private final float[] remappedMatrix = new float[16];
+    private final float[] orientation = new float[3];
+
+    // Calibration
+    private boolean isCalibrating = false;
+    private float calibSumX = 0f;
+    private float calibSumY = 0f;
+    private int calibCount = 0;
+    private static final int CALIBRATION_SAMPLES = 30;
+    private float initialAzimuth = 0f;
+    private boolean calibrationDone = false;
 
     // Drone state
     private volatile double droneLat, droneLon, droneAlt;
@@ -420,6 +431,24 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+
+        // Расчет азимута для калибровки
+        SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Z, remappedMatrix);
+        SensorManager.getOrientation(remappedMatrix, orientation);
+        float azimuth = orientation[0];
+
+        if (isCalibrating) {
+            calibSumX += (float) Math.cos(azimuth);
+            calibSumY += (float) Math.sin(azimuth);
+            calibCount++;
+            if (calibCount >= CALIBRATION_SAMPLES) {
+                initialAzimuth = (float) Math.atan2(calibSumY / calibCount, calibSumX / calibCount);
+                isCalibrating = false;
+                calibrationDone = true;
+                Log.d(TAG, "Compass calibrated: " + Math.toDegrees(initialAzimuth) + "°");
+            }
+        }
+
         scheduleFrame();
     }
 
@@ -487,14 +516,34 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             return;
         }
 
-        // 1. Камера из RotationVector
-        float fx = -rotationMatrix[2];
-        float fy = -rotationMatrix[8];
-        float fz = -rotationMatrix[5];
+        if (!calibrationDone && isCalibrating) return;
 
-        float ux = rotationMatrix[1];
-        float uy = rotationMatrix[7];
-        float uz = rotationMatrix[4];
+        // 1. Камера из RotationVector
+        // Используем индексы из тикета: Forward East = -R[8], North = -R[9], Up = -R[10]
+        float fBaseE = -rotationMatrix[8];
+        float fBaseN = -rotationMatrix[9];
+        float fBaseU = -rotationMatrix[10];
+
+        // Для Up вектора (в landscape это Column 0)
+        float uBaseE = rotationMatrix[0];
+        float uBaseN = rotationMatrix[1];
+        float uBaseU = rotationMatrix[2];
+
+        // Применяем калибровку азимута (вращение вокруг Up на -initialAzimuth)
+        float cosA = (float) Math.cos(-initialAzimuth);
+        float sinA = (float) Math.sin(-initialAzimuth);
+
+        float fe = fBaseE * cosA - fBaseN * sinA;
+        float fn = fBaseE * sinA + fBaseN * cosA;
+        float fu = fBaseU;
+
+        float ue = uBaseE * cosA - uBaseN * sinA;
+        float un = uBaseE * sinA + uBaseN * cosA;
+        float uu = uBaseU;
+
+        // Векторы для Filament: [E, U, -N]
+        float fx = fe; float fy = fu; float fz = -fn;
+        float ux = ue; float uy = uu; float uz = -un;
 
         float fl = (float) Math.sqrt(fx*fx + fy*fy + fz*fz);
         if (fl > 0) { fx /= fl; fy /= fl; fz /= fl; }
@@ -510,6 +559,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         camUpX = ux; camUpY = uy; camUpZ = uz;
 
         arRenderer.updateCameraAR(EYE_HEIGHT, fx, fy, fz, ux, uy, uz);
+
+        Log.d(TAG, String.format("Camera: F=[%.2f, %.2f, %.2f] U=[%.2f, %.2f, %.2f] Az=%.1f° InitAz=%.1f°",
+                fx, fy, fz, ux, uy, uz, Math.toDegrees(orientation[0]), Math.toDegrees(initialAzimuth)));
 
         // 2. Позиция дрона
         double refLat, refLon, refAlt;
@@ -536,8 +588,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             lastDroneZ = pos[2];
             hasRelativePosition = true;
 
-            Log.d(TAG, "Drone ENU: E=" + enu[0] + " N=" + enu[1] + " U=" + enu[2]);
-            Log.d(TAG, "Drone Filament: " + lastDroneX + ", " + lastDroneY + ", " + lastDroneZ);
+            Log.d(TAG, String.format("GPS User: %.6f, %.6f, %.1f | Drone: %.6f, %.6f, %.1f",
+                    refLat, refLon, refAlt, droneLat, droneLon, droneAlt));
+            Log.d(TAG, String.format("ENU: E=%.2f N=%.2f U=%.2f | Filament: X=%.2f Y=%.2f Z=%.2f",
+                    enu[0], enu[1], enu[2], lastDroneX, lastDroneY, lastDroneZ));
 
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
@@ -659,6 +713,12 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         if (glView != null) glView.onResume();
         if (arRenderer != null) arRenderer.onResume();
         if (rotationVectorSensor != null) {
+            // Стартуем калибровку
+            isCalibrating = true;
+            calibrationDone = false;
+            calibSumX = 0f;
+            calibSumY = 0f;
+            calibCount = 0;
             sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME);
         }
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
