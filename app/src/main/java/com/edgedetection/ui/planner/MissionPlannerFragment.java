@@ -96,9 +96,17 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
     // Simulation
     private Handler simHandler = new Handler(Looper.getMainLooper());
-    private Runnable simRunnable;
+    private final Runnable simRunnable = () -> {
+        Mission m = missionVm.getMissionState().getValue();
+        if (m != null && m.simState == Mission.SimulationState.RUNNING && isSimulationRunning) {
+            simulationTick(m);
+            simHandler.postDelayed(simRunnable, 16);
+        }
+    };
     private long lastFrameTime;
     private List<SimDrone> simDrones = new ArrayList<>();
+    private boolean isSimulationRunning = false;
+    private Bitmap droneBitmap;
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private boolean centeredInitially = false;
@@ -165,13 +173,8 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::onMissionChanged);
 
-        simRunnable = () -> {
-            Mission m = missionVm.getMissionState().getValue();
-            if (m != null && m.simState == Mission.SimulationState.RUNNING) {
-                simulationTick(m);
-                simHandler.postDelayed(simRunnable, 16);
-            }
-        };
+        // Кэшируем иконку дрона один раз
+        droneBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.drone);
     }
 
     // === MapLibre ===
@@ -275,17 +278,14 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void setupStart() {
-        // Кнопка СТАРТ теперь запускает симуляцию
+        // Кнопка СТАРТ перенаправляет на кнопку запуска симуляции
         btnStart.setOnClickListener(v -> {
             Mission m = missionVm.getMissionState().getValue();
             if (m == null || m.waypoints.size() < 2) {
                 Toast.makeText(requireContext(), "Создайте маршрут", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (m.simState == Mission.SimulationState.IDLE) initSimDrones(m);
-            missionVm.dispatch(new MissionIntent.StartSimulation());
-            lastFrameTime = SystemClock.elapsedRealtime();
-            simHandler.post(simRunnable);
+            btnSimStart.performClick();
         });
     }
 
@@ -322,6 +322,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     // === СИМУЛЯЦИЯ ===
     private void setupSimulationControls() {
         btnSimStart.setOnClickListener(v -> {
+            if (isSimulationRunning) return;
             Mission m = missionVm.getMissionState().getValue();
             if (m == null || m.waypoints.size() < 2) {
                 Toast.makeText(requireContext(), "Нет маршрута", Toast.LENGTH_SHORT).show();
@@ -330,16 +331,19 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
             if (m.simState == Mission.SimulationState.IDLE) initSimDrones(m);
             missionVm.dispatch(new MissionIntent.StartSimulation());
             lastFrameTime = SystemClock.elapsedRealtime();
+            isSimulationRunning = true;
             simHandler.post(simRunnable);
         });
 
         btnSimPause.setOnClickListener(v -> {
             missionVm.dispatch(new MissionIntent.PauseSimulation());
+            isSimulationRunning = false;
             simHandler.removeCallbacks(simRunnable);
         });
 
         btnSimStop.setOnClickListener(v -> {
             missionVm.dispatch(new MissionIntent.StopSimulation());
+            isSimulationRunning = false;
             simHandler.removeCallbacks(simRunnable);
             simDrones.clear();
             updateSimMarkers(); // очистит слой
@@ -462,11 +466,10 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         Style style = mapLibreMap.getStyle();
         if (style == null) return;
 
-        // Загружаем иконку: удаляем старую (если есть) и добавляем новую
-        Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.drone);
-        if (bitmap != null) {
+        // Используем кэшированную иконку дрона
+        if (droneBitmap != null) {
             style.removeImage("drone");
-            style.addImage("drone", bitmap);
+            style.addImage("drone", droneBitmap);
         }
 
         // Собираем GeoJSON
@@ -491,7 +494,6 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
             }
         }
 
-        updateSimMarkers();
         FeatureCollection collection = FeatureCollection.fromFeatures(features);
 
         // Обновляем или создаём источник
@@ -669,9 +671,14 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        isSimulationRunning = false;
         simHandler.removeCallbacks(simRunnable);
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+        if (droneBitmap != null) {
+            droneBitmap.recycle();
+            droneBitmap = null;
         }
         if (mapLibreMap != null) {
             for (Marker m : markers) mapLibreMap.removeMarker(m);
