@@ -5,7 +5,9 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.edgedetection.domain.mission.Mission;
 import com.edgedetection.domain.mission.MissionRepository;
+import com.edgedetection.domain.mission.WaypointAction;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +19,9 @@ public class RoomMissionRepository implements MissionRepository {
 
     public RoomMissionRepository(MissionDao missionDao) {
         this.missionDao = missionDao;
-        this.gson = new Gson();
+        this.gson = new GsonBuilder()
+                .registerTypeAdapter(WaypointAction.class, new WaypointActionAdapter())
+                .create();
     }
 
     @Override
