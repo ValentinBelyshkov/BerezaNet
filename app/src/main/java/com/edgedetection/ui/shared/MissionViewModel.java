@@ -164,6 +164,26 @@ public class MissionViewModel extends AndroidViewModel {
         });
     }
 
+    public void cleanupMissions() {
+        executor.execute(() -> {
+            List<Mission> missions = repository.getAllMissions();
+            Mission current = missionData.getValue();
+            boolean changed = false;
+            for (Mission m : missions) {
+                if (m.waypoints.size() < 2) {
+                    if (current != null && m.id.equals(current.id)) {
+                        continue;
+                    }
+                    repository.delete(m.id);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                loadAllMissions();
+            }
+        });
+    }
+
     // --- Waypoints ---
 
     private void addWaypoint(MissionIntent.AddWaypoint intent) {
@@ -365,7 +385,8 @@ public class MissionViewModel extends AndroidViewModel {
         String name = "Маршрут " + (count + 1);
         int colorIndex = count % MISSION_COLORS.length;
         int color = MISSION_COLORS[colorIndex];
-        update(m -> new Mission(UUID.randomUUID().toString(), name,
+        Mission current = missionData.getValue();
+        Mission next = new Mission(UUID.randomUUID().toString(), name,
                 Collections.emptyList(), Collections.emptyList(),
                 m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState, color,
                 m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds));

@@ -274,13 +274,15 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
     private void setupDeleteRoute() {
         btnDeleteRoute.setOnClickListener(v -> {
-            missionVm.dispatch(new MissionIntent.ClearMission());
+            Mission current = missionVm.getMissionState().getValue();
+            if (current != null) {
+                missionVm.dispatch(new MissionIntent.DeleteMission(current.id));
+            }
             isCreatingRoute = false;
             btnCreateFinish.setText("Создать");
             btnDeleteRoute.setVisibility(View.GONE);
             rightPanel.setVisibility(View.GONE);
             selectedWaypointId = null;
-            updateDropdown(missionVm.getMissionState().getValue());
         });
     }
 
@@ -728,7 +730,11 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     }
     // === Lifecycle ===
     @Override public void onStart() { super.onStart(); mapView.onStart(); }
-    @Override public void onResume() { super.onResume(); mapView.onResume(); }
+    @Override public void onResume() {
+        super.onResume();
+        mapView.onResume();
+        missionVm.cleanupMissions();
+    }
     @Override public void onPause() { super.onPause(); mapView.onPause(); }
     @Override public void onStop() { super.onStop(); mapView.onStop(); }
 
