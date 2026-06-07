@@ -33,7 +33,8 @@ public class RoomMissionRepository implements MissionRepository {
     public Mission load(String missionId) {
         for (MissionEntity entity : missionDao.getAll()) {
             if (entity.id.equals(missionId)) {
-                return gson.fromJson(entity.jsonData, Mission.class);
+                Mission m = gson.fromJson(entity.jsonData, Mission.class);
+                return m != null ? m.sanitize() : null;
             }
         }
         return null;
@@ -50,7 +51,10 @@ public class RoomMissionRepository implements MissionRepository {
     public List<Mission> getAllMissions() {
         List<Mission> missions = new ArrayList<>();
         for (MissionEntity entity : missionDao.getAll()) {
-            missions.add(gson.fromJson(entity.jsonData, Mission.class));
+            Mission m = gson.fromJson(entity.jsonData, Mission.class);
+            if (m != null) {
+                missions.add(m.sanitize());
+            }
         }
         return missions;
     }

@@ -113,6 +113,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private volatile float droneHeading = 0f;
     private volatile boolean simulationActive = false;
     private volatile boolean simulationPaused = false;
+    private volatile int currentDroneIndex = -1;
     private float lastDroneX, lastDroneY, lastDroneZ;
     private boolean hasRelativePosition = false;
     private double missionOriginLat, missionOriginLon, missionOriginAlt;
@@ -195,6 +196,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
         missionVm.getDronePosition().observe(getViewLifecycleOwner(), pos -> {
             if (pos != null && pos.active) {
+                this.currentDroneIndex = pos.index;
                 updateDronePosition(pos.lat, pos.lon, pos.alt, pos.heading);
             }
         });
@@ -454,6 +456,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
                     b.hit = true;
                     Log.i(TAG, ">>> HIT DRONE! dist=" + d + "m");
                     Toast.makeText(requireContext(), "Попадание!", Toast.LENGTH_SHORT).show();
+                    
+                    MissionViewModel missionVm = new ViewModelProvider(requireActivity()).get(MissionViewModel.class);
+                    missionVm.dispatch(new MissionIntent.ShotDownDrone(currentDroneIndex));
                 }
             } else if (!b.hit) {
                 toRemove.add(b);

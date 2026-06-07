@@ -13,6 +13,7 @@ import com.edgedetection.R;
 import com.edgedetection.core.ScreenMode;
 import com.edgedetection.ui.battle.BattleFragment;
 import com.edgedetection.ui.planner.MissionPlannerFragment;
+import com.edgedetection.ui.settings.SettingsFragment;
 import com.edgedetection.ui.shared.MissionViewModel;
 import com.edgedetection.ui.test3d.Test3DFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -62,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
                 showFragment("test3d", new Test3DFragment(), ScreenMode.FULL_TEST3D);
                 return true;
             } else if (id == R.id.nav_settings) {
-                // TODO: открыть SettingsFragment если нужно
+                showFragment("settings", new SettingsFragment(), ScreenMode.FULL_SETTINGS);
                 return true;
             }
             return false;
@@ -107,6 +108,8 @@ public class MainActivity extends AppCompatActivity {
                 showFragment("planner", new MissionPlannerFragment(), ScreenMode.FULL_PLANNER);
             } else if ("test3d".equals(tag)) {
                 showFragment("test3d", new Test3DFragment(), ScreenMode.FULL_TEST3D);
+            } else if ("settings".equals(tag)) {
+                showFragment("settings", new SettingsFragment(), ScreenMode.FULL_SETTINGS);
             } else {
                 showFragment("battle", new BattleFragment(), ScreenMode.FULL_BATTLE);
             }
@@ -125,6 +128,7 @@ public class MainActivity extends AppCompatActivity {
         if (mode == ScreenMode.FULL_BATTLE) return "battle";
         if (mode == ScreenMode.FULL_PLANNER) return "planner";
         if (mode == ScreenMode.FULL_TEST3D) return "test3d";
+        if (mode == ScreenMode.FULL_SETTINGS) return "settings";
         return "battle";
     }
 
@@ -134,6 +138,7 @@ public class MainActivity extends AppCompatActivity {
         if (mode == ScreenMode.FULL_BATTLE) menuId = R.id.nav_battle;
         else if (mode == ScreenMode.FULL_PLANNER) menuId = R.id.nav_planner;
         else if (mode == ScreenMode.FULL_TEST3D) menuId = R.id.nav_test3d;
+        else if (mode == ScreenMode.FULL_SETTINGS) menuId = R.id.nav_settings;
 
         if (menuId != -1 && bottomNav.getSelectedItemId() != menuId) {
             bottomNav.setSelectedItemId(menuId);
