@@ -17,6 +17,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -35,6 +36,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.edgedetection.R;
 import com.edgedetection.EdgeDetector;
+import com.edgedetection.domain.ballistics.Bullet;
 import com.edgedetection.domain.geo.GeoUtils;
 import com.edgedetection.domain.mission.DronePosition;
 import com.edgedetection.domain.mission.Mission;
@@ -47,6 +49,7 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.google.android.filament.Viewport;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.opencv.core.CvType;
@@ -85,6 +88,14 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private ImageView offscreenIndicator;
     private TextView gpsWarning;
 
+    // --- Bullet system ---
+    private BulletTrajectoryView bulletOverlay;
+    private ImageButton fireButton;
+    private final List<Bullet> bullets = new ArrayList<>();
+    private long lastFrameNanos = 0;
+    private float camForwardX, camForwardY, camForwardZ;
+    private float camUpX, camUpY, camUpZ;
+
     // Location
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
@@ -116,7 +127,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         @Override
         public void doFrame(long frameTimeNanos) {
             if (isDetached() || !isAdded()) return;
-            updateScene();
+            float dt = (lastFrameNanos == 0) ? 0.016f : (frameTimeNanos - lastFrameNanos) / 1_000_000_000f;
+            lastFrameNanos = frameTimeNanos;
+            updateScene(dt);
         }
     };
     private boolean frameScheduled = false;
@@ -150,6 +163,11 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         arSurface = view.findViewById(R.id.ar_overlay);
         offscreenIndicator = view.findViewById(R.id.offscreen_indicator);
         gpsWarning = view.findViewById(R.id.gps_warning);
+
+        // Bullet overlay & fire button
+        bulletOverlay = view.findViewById(R.id.bullet_overlay);
+        fireButton = view.findViewById(R.id.fire_button);
+        fireButton.setOnClickListener(v -> fireBullet());
 
         arRenderer = new Filament3DRenderer(requireContext(), arSurface, true);
         arRenderer.setFarPlane(2000.0);
@@ -358,7 +376,6 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
     // ===================== Public API for simulation =====================
 
-    /** Вызывается извне (симуляция / ViewModel). Потокобезопасно. */
     public void updateDronePosition(double lat, double lon, double alt, float headingDegrees) {
         this.droneLat = lat;
         this.droneLon = lon;
@@ -398,7 +415,6 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
-    /** Декуплинг: один кадр = один updateScene, независимо от частоты сенсоров/симуляции */
     private void scheduleFrame() {
         if (!frameScheduled) {
             frameScheduled = true;
@@ -406,7 +422,51 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         }
     }
 
-    private void updateScene() {
+    // ===================== Bullet firing =====================
+
+    private void fireBullet() {
+        float speed = Bullet.SPEED_MPS;
+        float vx = camForwardX * speed;
+        float vy = camForwardY * speed;
+        float vz = camForwardZ * speed;
+
+        // Выстрел из центра экрана = из позиции камеры + 0.5м вперёд
+        float sx = camForwardX * 0.5f;
+        float sy = EYE_HEIGHT + camForwardY * 0.5f;
+        float sz = camForwardZ * 0.5f;
+
+        Bullet b = new Bullet(sx, sy, sz, vx, vy, vz);
+        bullets.add(b);
+        Log.i(TAG, "FIRE! count=" + bullets.size());
+    }
+
+    private void updateBullets(float dt) {
+        if (bullets.isEmpty()) return;
+        float droneRadius = arRenderer.getModelRadius();
+        List<Bullet> toRemove = new ArrayList<>();
+
+        for (Bullet b : bullets) {
+            b.update(dt);
+            if (b.active) {
+                float d = b.distanceTo(lastDroneX, lastDroneY, lastDroneZ);
+                if (d < droneRadius + 0.05f) {
+                    b.active = false;
+                    b.hit = true;
+                    Log.i(TAG, ">>> HIT DRONE! dist=" + d + "m");
+                    Toast.makeText(requireContext(), "Попадание!", Toast.LENGTH_SHORT).show();
+                }
+            } else if (!b.hit) {
+                toRemove.add(b);
+            } else if (b.hit) {
+                if (System.currentTimeMillis() - b.spawnTime > 2000) toRemove.add(b);
+            }
+        }
+        bullets.removeAll(toRemove);
+    }
+
+    // ===================== Scene update =====================
+
+    private void updateScene(float dt) {
         frameScheduled = false;
         if (arRenderer == null || !arRenderer.isModelLoaded()) {
             Log.w(TAG, "AR not ready");
@@ -430,6 +490,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         ux -= dot * fx; uy -= dot * fy; uz -= dot * fz;
         ul = (float) Math.sqrt(ux*ux + uy*uy + uz*uz);
         if (ul > 0) { ux /= ul; uy /= ul; uz /= ul; }
+
+        // Сохраняем базис для выстрела
+        camForwardX = fx; camForwardY = fy; camForwardZ = fz;
+        camUpX = ux; camUpY = uy; camUpZ = uz;
 
         arRenderer.updateCameraAR(EYE_HEIGHT, fx, fy, fz, ux, uy, uz);
 
@@ -470,8 +534,32 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             }
         }
 
-        // 3. Индикатор за краем экрана
+        // 3. Баллистика
+        if (dt > 0 && dt < 0.5f) {
+            updateBullets(dt);
+        }
+
+        // 4. Индикатор за краем экрана
         updateOffscreenIndicator(fx, fy, fz, ux, uy, uz);
+
+        // 5. Обновляем оверлей траекторий (матрицы камеры + пули)
+        if (bulletOverlay != null) {
+            double[] viewMatDouble = new double[16];
+            double[] projMatDouble = new double[16];
+            arRenderer.getCamera().getViewMatrix(viewMatDouble);
+            arRenderer.getCamera().getProjectionMatrix(projMatDouble);
+
+            float[] viewMat = new float[16];
+            float[] projMat = new float[16];
+            for (int i = 0; i < 16; i++) {
+                viewMat[i] = (float) viewMatDouble[i];
+                projMat[i] = (float) projMatDouble[i];
+            }
+
+            Viewport vp = arRenderer.getViewport();
+            bulletOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
+            bulletOverlay.setBullets(bullets);
+        }
     }
 
     private void updateOffscreenIndicator(float fx, float fy, float fz,
@@ -567,6 +655,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     @Override
     public void onPause() {
         super.onPause();
+        lastFrameNanos = 0;
         if (cameraProvider != null) {
             cameraProvider.unbindAll();
         }
@@ -582,6 +671,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        bullets.clear();
         if (choreographer != null) {
             choreographer.removeFrameCallback(frameCallback);
         }

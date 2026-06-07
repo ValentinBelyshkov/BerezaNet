@@ -597,9 +597,18 @@ public class Filament3DRenderer {
         );
     }
 
+    private double mFarPlane = 1000.0;
+
+    // обновить метод
     public void setFarPlane(double far) {
+        mFarPlane = far;
         if (mDestroyed || mEngineDestroyed) return;
         mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, far, Camera.Fov.VERTICAL);
+    }
+
+    // добавить геттер
+    public double getFarPlane() {
+        return mFarPlane;
     }
 
     public float getFovDegrees() { return mFovDegrees; }
