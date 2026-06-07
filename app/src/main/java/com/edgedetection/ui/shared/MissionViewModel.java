@@ -33,13 +33,26 @@ public class MissionViewModel extends AndroidViewModel {
     private final MutableLiveData<List<Mission>> allMissions = new MutableLiveData<>(new ArrayList<>());
     private final Executor executor;
 
+    private static final int[] MISSION_COLORS = {
+            0xFFFF0000, // Red
+            0xFF00FF00, // Green
+            0xFF0000FF, // Blue
+            0xFFFFFF00, // Yellow
+            0xFFFF00FF, // Magenta
+            0xFF00FFFF, // Cyan
+            0xFFFFA500, // Orange
+            0xFF800080, // Purple
+            0xFF008080, // Teal
+            0xFFA52A2A  // Brown
+    };
+
     public MissionViewModel(@NonNull Application application) {
         super(application);
         this.repository = new RoomMissionRepository(AppDatabase.getDatabase(application).missionDao());
         this.missionData = new MutableLiveData<>(new Mission(
-                UUID.randomUUID().toString(), "Новый маршрут",
+                UUID.randomUUID().toString(), "Маршрут 1",
                 Collections.emptyList(), Collections.emptyList(),
-                null, null, null, null));
+                null, null, null, null, 1, 0, Mission.SimulationState.IDLE, MISSION_COLORS[0]));
         this.executor = Executors.newSingleThreadExecutor();
         loadAllMissions();
     }
@@ -150,7 +163,7 @@ public class MissionViewModel extends AndroidViewModel {
             double[] origin = m.resolveOrigin();
             if (origin == null) {
                 return new Mission(m.id, m.name, list, m.geoAnchors, m.geoFence,
-                        intent.lat, intent.lon, intent.altAmsl);
+                        intent.lat, intent.lon, intent.altAmsl, m.droneCount, m.shotDownCount, m.simState, m.color);
             }
             return m.withWaypoints(list);
         });
@@ -331,9 +344,13 @@ public class MissionViewModel extends AndroidViewModel {
     }
 
     private void clearMission() {
-        update(m -> new Mission(UUID.randomUUID().toString(), "Новый маршрут",
+        int count = (allMissions.getValue() != null) ? allMissions.getValue().size() : 0;
+        String name = "Маршрут " + (count + 1);
+        int colorIndex = count % MISSION_COLORS.length;
+        int color = MISSION_COLORS[colorIndex];
+        update(m -> new Mission(UUID.randomUUID().toString(), name,
                 Collections.emptyList(), Collections.emptyList(),
-                m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState));
+                m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState, color));
     }
 
     public interface MissionTransform {

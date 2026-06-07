@@ -31,6 +31,11 @@ import org.maplibre.geojson.Feature;
 import org.maplibre.geojson.FeatureCollection;
 import org.maplibre.geojson.Point;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -54,6 +59,7 @@ import com.google.android.gms.location.Priority;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 
+import org.maplibre.android.annotations.IconFactory;
 import org.maplibre.android.annotations.Marker;
 import org.maplibre.android.annotations.MarkerOptions;
 import org.maplibre.android.annotations.Polyline;
@@ -92,6 +98,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private String selectedWaypointId = null;
     private final List<Marker> markers = new ArrayList<>();
     private final List<Marker> simMarkers = new ArrayList<>();
+    private final java.util.Map<Integer, org.maplibre.android.annotations.Icon> iconCache = new java.util.HashMap<>();
     private Polyline routePolyline;
 
     // Simulation
@@ -572,13 +579,33 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         for (Marker m : markers) mapLibreMap.removeMarker(m);
         markers.clear();
 
+        org.maplibre.android.annotations.Icon icon = getIconForColor(mission.color);
+
         for (Waypoint wp : mission.waypoints) {
             Marker m = mapLibreMap.addMarker(new MarkerOptions()
                     .position(new LatLng(wp.latitude, wp.longitude))
                     .title("WP " + (wp.orderIndex + 1))
+                    .icon(icon)
                     .snippet(wp.id));
             markers.add(m);
         }
+    }
+
+    private org.maplibre.android.annotations.Icon getIconForColor(int color) {
+        if (iconCache.containsKey(color)) return iconCache.get(color);
+
+        Drawable drawable = ContextCompat.getDrawable(requireContext(), org.maplibre.android.R.drawable.maplibre_marker_icon_default);
+        if (drawable == null) return null;
+
+        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        drawable.draw(canvas);
+
+        org.maplibre.android.annotations.Icon icon = IconFactory.getInstance(requireContext()).fromBitmap(bitmap);
+        iconCache.put(color, icon);
+        return icon;
     }
 
     private void updateRouteLine(Mission mission) {
@@ -592,7 +619,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         List<LatLng> curve = CurveGenerator.generateCatmullRom(mission.waypoints, 20);
         routePolyline = mapLibreMap.addPolyline(new PolylineOptions()
                 .addAll(curve)
-                .color(0xFFFF0000)
+                .color(mission.color)
                 .width(5f));
     }
 

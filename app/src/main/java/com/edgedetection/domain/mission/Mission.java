@@ -14,6 +14,7 @@ public final class Mission {
     public final Double originLongitude;
     public final Double originAltitudeAmsl;
     public final int droneCount;
+    public final int color; // ARGB color
 
     public final int shotDownCount;
     public final SimulationState simState;
@@ -23,7 +24,7 @@ public final class Mission {
 
     public Mission(String id, String name, List<Waypoint> waypoints, List<GeoAnchor> geoAnchors,
                    GeoFence geoFence, Double originLatitude, Double originLongitude,
-                   Double originAltitudeAmsl, int droneCount, int shotDownCount, SimulationState simState) {
+                   Double originAltitudeAmsl, int droneCount, int shotDownCount, SimulationState simState, int color) {
         this.id = id;
         this.name = name;
         this.waypoints = Collections.unmodifiableList(new ArrayList<>(waypoints));
@@ -35,39 +36,40 @@ public final class Mission {
         this.droneCount = Math.max(1, droneCount);
         this.shotDownCount = shotDownCount;
         this.simState = simState != null ? simState : SimulationState.IDLE;
+        this.color = color;
     }
 
     // overload для совместимости
     public Mission(String id, String name, List<Waypoint> waypoints, List<GeoAnchor> geoAnchors,
                    GeoFence geoFence, Double originLatitude, Double originLongitude,
                    Double originAltitudeAmsl) {
-        this(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, 1, 0, SimulationState.IDLE);
+        this(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, 1, 0, SimulationState.IDLE, 0xFFFF0000);
     }
 
     public Mission withName(String name) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color);
     }
 
     public Mission withWaypoints(List<Waypoint> waypoints) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color);
     }
 
     public Mission withGeoAnchors(List<GeoAnchor> geoAnchors) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color);
     }
 
     public Mission withGeoFence(GeoFence geoFence) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color);
     }
 
     public Mission withOrigin(double lat, double lon, double alt) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, lat, lon, alt, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, lat, lon, alt, droneCount, shotDownCount, simState, color);
     }
 
     public Mission withDroneCount(int count) {
         return new Mission(id, name, waypoints, geoAnchors, geoFence,
                 originLatitude, originLongitude, originAltitudeAmsl,
-                Math.max(1, count), shotDownCount, simState);
+                Math.max(1, count), shotDownCount, simState, color);
     }
 
     public double[] resolveOrigin() {
@@ -85,10 +87,14 @@ public final class Mission {
         return null;
     }
     public Mission withShotDownCount(int count) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, count, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, count, simState, color);
     }
 
     public Mission withSimState(SimulationState state) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, state);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, state, color);
+    }
+
+    public Mission withColor(int color) {
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color);
     }
 }
