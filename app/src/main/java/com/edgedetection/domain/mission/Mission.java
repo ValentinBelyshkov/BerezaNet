@@ -61,7 +61,7 @@ public final class Mission {
     }
 
     public Mission withOrigin(double lat, double lon, double alt) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, lat, lon, alt, droneCount, shotDownCount, simState);
     }
 
     public Mission withDroneCount(int count) {
