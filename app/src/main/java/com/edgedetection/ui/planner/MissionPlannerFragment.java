@@ -103,16 +103,19 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
     // Simulation
     private Handler simHandler = new Handler(Looper.getMainLooper());
-    private final Runnable simRunnable = () -> {
-        Mission m = missionVm.getMissionState().getValue();
-        if (m != null && m.simState == Mission.SimulationState.RUNNING && isSimulationRunning) {
-            simulationTick(m);
-            simHandler.postDelayed(simRunnable, 16);
+    private boolean isSimulationRunning = false;
+    private final Runnable simRunnable = new Runnable() {
+        @Override
+        public void run() {
+            Mission m = missionVm.getMissionState().getValue();
+            if (m != null && m.simState == Mission.SimulationState.RUNNING && isSimulationRunning) {
+                simulationTick(m);
+                simHandler.postDelayed(this, 16);
+            }
         }
     };
     private long lastFrameTime;
     private List<SimDrone> simDrones = new ArrayList<>();
-    private boolean isSimulationRunning = false;
     private Bitmap droneBitmap;
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
