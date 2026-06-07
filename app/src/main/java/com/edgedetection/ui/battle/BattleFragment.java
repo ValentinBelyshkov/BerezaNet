@@ -43,6 +43,7 @@ import com.edgedetection.domain.mission.Mission;
 import com.edgedetection.opengl.EdgeDetectionGLView;
 import com.edgedetection.opengl.Filament3DRenderer;
 import com.edgedetection.ui.shared.MissionViewModel;
+import com.edgedetection.ui.shared.MissionIntent;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;

@@ -386,10 +386,24 @@ public class MissionViewModel extends AndroidViewModel {
         int colorIndex = count % MISSION_COLORS.length;
         int color = MISSION_COLORS[colorIndex];
         Mission current = missionData.getValue();
-        Mission next = new Mission(UUID.randomUUID().toString(), name,
+        
+        Mission next;
+        if (current != null) {
+            next = new Mission(UUID.randomUUID().toString(), name,
                 Collections.emptyList(), Collections.emptyList(),
-                m.geoFence, null, null, null, m.droneCount, m.shotDownCount, m.simState, color,
-                m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds));
+                current.geoFence, null, null, null, current.droneCount, 0, Mission.SimulationState.IDLE, color,
+                current.maxLives, current.speedKmh, current.altitudeMeters, current.spawnIntervalSeconds);
+        } else {
+            next = new Mission(UUID.randomUUID().toString(), name,
+                Collections.emptyList(), Collections.emptyList(),
+                null, null, null, null, 1, 0, Mission.SimulationState.IDLE, color,
+                3, 200f, 100f, 90f);
+        }
+        missionData.postValue(next);
+        executor.execute(() -> {
+            repository.save(next);
+            loadAllMissions();
+        });
     }
 
     public interface MissionTransform {
