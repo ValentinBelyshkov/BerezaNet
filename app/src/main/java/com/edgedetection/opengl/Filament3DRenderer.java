@@ -598,6 +598,28 @@ public class Filament3DRenderer {
         }
     }
 
+    public float[] getDroneModelMatrix() {
+        if (mAsset == null) return new float[16];
+        TransformManager tm = mEngine.getTransformManager();
+        int root = mAsset.getRoot();
+        float[] matrix = new float[16];
+        if (root != 0) {
+            int inst = tm.getInstance(root);
+            if (inst != 0) {
+                tm.getTransform(inst, matrix);
+            }
+        } else {
+            int[] entities = mAsset.getEntities();
+            if (entities != null && entities.length > 0) {
+                int inst = tm.getInstance(entities[0]);
+                if (inst != 0) {
+                    tm.getTransform(inst, matrix);
+                }
+            }
+        }
+        return matrix;
+    }
+
     /** First-person камера AR: глаза в (0,eyeHeight,0), смотрит вдоль forward, up задаёт вертикаль кадра */
     public void updateCameraAR(float eyeHeight,
                                float forwardX, float forwardY, float forwardZ,

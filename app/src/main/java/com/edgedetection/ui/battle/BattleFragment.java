@@ -53,6 +53,8 @@ import com.google.android.gms.location.Priority;
 import com.google.android.filament.Viewport;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 
@@ -110,6 +112,8 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private final float[] rotationMatrix = new float[16];
     private final float[] remappedMatrix = new float[16];
     private final float[] orientation = new float[3];
+    private float[] lastRotationVector = new float[4];
+    private long lastLogTime = 0;
 
     // Calibration
     private boolean isCalibrating = false;
@@ -430,6 +434,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
+        System.arraycopy(event.values, 0, lastRotationVector, 0, Math.min(event.values.length, lastRotationVector.length));
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
 
         // Расчет азимута для калибровки
@@ -539,21 +544,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         float uBaseN = landscapeMatrix[5];
         float uBaseU = landscapeMatrix[9];
 
-        // Применяем калибровку азимута (вращение вокруг Up на -initialAzimuth)
-        float cosA = (float) Math.cos(-initialAzimuth);
-        float sinA = (float) Math.sin(-initialAzimuth);
-
-        float fe = fBaseE * cosA - fBaseN * sinA;
-        float fn = fBaseE * sinA + fBaseN * cosA;
-        float fu = fBaseU;
-
-        float ue = uBaseE * cosA - uBaseN * sinA;
-        float un = uBaseE * sinA + uBaseN * cosA;
-        float uu = uBaseU;
-
         // Векторы для Filament: [E, U, -N]
-        float fx = fe; float fy = fu; float fz = -fn;
-        float ux = ue; float uy = uu; float uz = -un;
+        float fx = fBaseE; float fy = fBaseU; float fz = -fBaseN;
+        float ux = uBaseE; float uy = uBaseU; float uz = -uBaseN;
 
         float fl = (float) Math.sqrt(fx*fx + fy*fy + fz*fz);
         if (fl > 0) { fx /= fl; fy /= fl; fz /= fl; }
@@ -603,6 +596,14 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             Log.d(TAG, String.format("ENU: E=%.2f N=%.2f U=%.2f | Filament: X=%.2f Y=%.2f Z=%.2f",
                     enu[0], enu[1], enu[2], lastDroneX, lastDroneY, lastDroneZ));
 
+            long now = System.currentTimeMillis();
+            if (now - lastLogTime > 1000) {
+                lastLogTime = now;
+                // We'll calculate visibility here or use the one from updateOffscreenIndicator if we move it
+                boolean visible = isDroneVisible(fx, fy, fz, ux, uy, uz);
+                logState(fx, fy, fz, ux, uy, uz, refLat, refLon, refAlt, enu, lastDroneX, lastDroneY, lastDroneZ, visible);
+            }
+
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
                     (float) Math.toRadians(droneHeading) + (float) Math.PI);
@@ -643,6 +644,180 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             Viewport vp = arRenderer.getViewport();
             bulletOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
             bulletOverlay.setBullets(bullets);
+        }
+    }
+
+    private boolean isDroneVisible(float fx, float fy, float fz, float ux, float uy, float uz) {
+        if (!hasRelativePosition) return false;
+
+        float rx = fy * uz - fz * uy;
+        float ry = fz * ux - fx * uz;
+        float rz = fx * uy - fy * ux;
+
+        float dx = lastDroneX;
+        float dy = lastDroneY - EYE_HEIGHT;
+        float dz = lastDroneZ;
+
+        float zCam = dx*fx + dy*fy + dz*fz;
+        float xCam = dx*rx + dy*ry + dz*rz;
+        float yCam = dx*ux + dy*uy + dz*uz;
+
+        float aspect = arRenderer.getAspectRatio();
+        float tanX = aspect * TAN_HALF_FOV_Y;
+
+        return zCam > 0.1f &&
+                Math.abs(xCam) < zCam * tanX &&
+                Math.abs(yCam) < zCam * TAN_HALF_FOV_Y;
+    }
+
+    private void logState(float fx, float fy, float fz, float ux, float uy, float uz,
+                         double refLat, double refLon, double refAlt,
+                         double[] enu, float lastDroneX, float lastDroneY, float lastDroneZ,
+                         boolean droneVisible) {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("timestamp", System.currentTimeMillis() / 1000);
+
+            JSONObject user = new JSONObject();
+            JSONObject userGps = new JSONObject();
+            userGps.put("lat", refLat);
+            userGps.put("lon", refLon);
+            userGps.put("alt", refAlt);
+            user.put("gps", userGps);
+
+            JSONObject sensors = new JSONObject();
+            JSONArray rv = new JSONArray();
+            for (float v : lastRotationVector) rv.put(v);
+            sensors.put("rotationVector", rv);
+            
+            float[] standardOrientation = new float[3];
+            SensorManager.getOrientation(rotationMatrix, standardOrientation);
+            sensors.put("azimuth", Math.toDegrees(standardOrientation[0]));
+            sensors.put("pitch", Math.toDegrees(standardOrientation[1]));
+            sensors.put("roll", Math.toDegrees(standardOrientation[2]));
+            user.put("sensors", sensors);
+            root.put("user", user);
+
+            JSONObject drone = new JSONObject();
+            JSONObject droneGps = new JSONObject();
+            droneGps.put("lat", droneLat);
+            droneGps.put("lon", droneLon);
+            droneGps.put("alt", droneAlt);
+            drone.put("gps", droneGps);
+            root.put("drone", drone);
+
+            JSONObject enuObj = new JSONObject();
+            JSONObject origin = new JSONObject();
+            origin.put("lat", refLat);
+            origin.put("lon", refLon);
+            enuObj.put("origin", origin);
+            JSONObject droneEnu = new JSONObject();
+            droneEnu.put("E", enu[0]);
+            droneEnu.put("N", enu[1]);
+            droneEnu.put("U", enu[2]);
+            enuObj.put("drone", droneEnu);
+            root.put("enu", enuObj);
+
+            JSONObject engine = new JSONObject();
+            engine.put("convention", "Y-up, right-handed");
+            JSONObject dronePos = new JSONObject();
+            dronePos.put("x", lastDroneX);
+            dronePos.put("y", lastDroneY);
+            dronePos.put("z", lastDroneZ);
+            engine.put("dronePos", dronePos);
+
+            JSONObject camera = new JSONObject();
+            JSONObject camPos = new JSONObject();
+            camPos.put("x", 0);
+            camPos.put("y", EYE_HEIGHT);
+            camPos.put("z", 0);
+            camera.put("pos", camPos);
+
+            JSONObject forward = new JSONObject();
+            forward.put("x", fx);
+            forward.put("y", fy);
+            forward.put("z", fz);
+            camera.put("forward", forward);
+
+            JSONObject up = new JSONObject();
+            up.put("x", ux);
+            up.put("y", uy);
+            up.put("z", uz);
+            camera.put("up", up);
+
+            // Right vector: forward x up
+            float rx = fy * uz - fz * uy;
+            float ry = fz * ux - fx * uz;
+            float rz = fx * uy - fy * ux;
+            JSONObject right = new JSONObject();
+            right.put("x", rx);
+            right.put("y", ry);
+            right.put("z", rz);
+            camera.put("right", right);
+            engine.put("camera", camera);
+
+            double[] viewMat = new double[16];
+            double[] projMat = new double[16];
+            arRenderer.getCamera().getViewMatrix(viewMat);
+            arRenderer.getCamera().getProjectionMatrix(projMat);
+            JSONArray viewMatArr = new JSONArray();
+            for (double v : viewMat) viewMatArr.put(v);
+            engine.put("viewMatrix", viewMatArr);
+            JSONArray projMatArr = new JSONArray();
+            for (double v : projMat) projMatArr.put(v);
+            engine.put("projectionMatrix", projMatArr);
+
+            float[] modelMat = arRenderer.getDroneModelMatrix();
+            JSONArray modelMatArr = new JSONArray();
+            for (float v : modelMat) modelMatArr.put(v);
+            engine.put("modelMatrixDrone", modelMatArr);
+            root.put("engine", engine);
+
+            JSONObject screen = new JSONObject();
+            // Calculate NDC
+            float[] v_world = {lastDroneX, lastDroneY, lastDroneZ, 1.0f};
+            float[] v_view = new float[4];
+            for (int i = 0; i < 4; i++) {
+                v_view[i] = 0;
+                for (int j = 0; j < 4; j++) {
+                    v_view[i] += (float)viewMat[j * 4 + i] * v_world[j];
+                }
+            }
+            float[] v_clip = new float[4];
+            for (int i = 0; i < 4; i++) {
+                v_clip[i] = 0;
+                for (int j = 0; j < 4; j++) {
+                    v_clip[i] += (float)projMat[j * 4 + i] * v_view[j];
+                }
+            }
+            JSONObject ndc = new JSONObject();
+            if (v_clip[3] != 0) {
+                ndc.put("x", v_clip[0] / v_clip[3]);
+                ndc.put("y", v_clip[1] / v_clip[3]);
+                ndc.put("z", v_clip[2] / v_clip[3]);
+            } else {
+                ndc.put("x", 0); ndc.put("y", 0); ndc.put("z", 0);
+            }
+            screen.put("droneNDC", ndc);
+
+            Viewport vp = arRenderer.getViewport();
+            JSONObject pixel = new JSONObject();
+            if (v_clip[3] != 0) {
+                float nx = v_clip[0] / v_clip[3];
+                float ny = v_clip[1] / v_clip[3];
+                pixel.put("x", (nx * 0.5f + 0.5f) * vp.width);
+                pixel.put("y", (1.0f - (ny * 0.5f + 0.5f)) * vp.height);
+            } else {
+                pixel.put("x", 0); pixel.put("y", 0);
+            }
+            screen.put("dronePixel", pixel);
+            screen.put("visible", droneVisible);
+            root.put("screen", screen);
+
+            Log.i("DRONE_STATE_JSON", root.toString(2));
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error logging state", e);
         }
     }
 
