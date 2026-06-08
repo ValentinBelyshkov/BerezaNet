@@ -544,21 +544,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         float uBaseN = landscapeMatrix[5];
         float uBaseU = landscapeMatrix[9];
 
-        // Применяем калибровку азимута (вращение вокруг Up на -initialAzimuth)
-        float cosA = (float) Math.cos(-initialAzimuth);
-        float sinA = (float) Math.sin(-initialAzimuth);
-
-        float fe = fBaseE * cosA - fBaseN * sinA;
-        float fn = fBaseE * sinA + fBaseN * cosA;
-        float fu = fBaseU;
-
-        float ue = uBaseE * cosA - uBaseN * sinA;
-        float un = uBaseE * sinA + uBaseN * cosA;
-        float uu = uBaseU;
-
         // Векторы для Filament: [E, U, -N]
-        float fx = fe; float fy = fu; float fz = -fn;
-        float ux = ue; float uy = uu; float uz = -un;
+        float fx = fBaseE; float fy = fBaseU; float fz = -fBaseN;
+        float ux = uBaseE; float uy = uBaseU; float uz = -uBaseN;
 
         float fl = (float) Math.sqrt(fx*fx + fy*fy + fz*fz);
         if (fl > 0) { fx /= fl; fy /= fl; fz /= fl; }

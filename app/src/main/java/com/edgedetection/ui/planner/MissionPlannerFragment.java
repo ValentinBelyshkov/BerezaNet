@@ -119,6 +119,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private Bitmap droneBitmap;
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
+    private Location lastUserLocation;
     private boolean centeredInitially = false;
     private List<Mission> currentMissions = new ArrayList<>();
     static class SimDrone {
@@ -218,8 +219,12 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
         map.addOnMapClickListener(latLng -> {
             if (isCreatingRoute) {
+                double alt = 100.0;
+                if (lastUserLocation != null) {
+                    alt = lastUserLocation.getAltitude();
+                }
                 missionVm.dispatch(new MissionIntent.AddWaypoint(
-                        latLng.getLatitude(), latLng.getLongitude(), 100.0));
+                        latLng.getLatitude(), latLng.getLongitude(), alt));
                 Toast.makeText(requireContext(), "Точка добавлена", Toast.LENGTH_SHORT).show();
                 return true;
             }
@@ -388,6 +393,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         Waypoint start = m.waypoints.get(0);
         double speedMps = m.speedKmh * 1000.0 / 3600.0;
         double intervalMeters = speedMps * m.spawnIntervalSeconds;
+        double baseAlt = m.originAltitudeAmsl != null ? m.originAltitudeAmsl : start.altitudeAmsl;
         for (int i = 0; i < m.droneCount; i++) {
             SimDrone d = new SimDrone();
             d.index = i;
@@ -399,7 +405,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
             d.lon = start.longitude;
             d.prevLat = start.latitude;
             d.prevLon = start.longitude;
-            d.alt = m.altitudeMeters; // Используем заданную высоту
+            d.alt = baseAlt + m.altitudeMeters; // Высота относительно начала
             d.bearing = 0;
             simDrones.add(d);
         }
@@ -445,7 +451,8 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 double[] pos = interpolatePosition(mission.waypoints, d.distanceMeters);
                 d.lat = pos[0];
                 d.lon = pos[1];
-                d.alt = mission.altitudeMeters; // Используем заданную высоту
+                double baseAlt = mission.originAltitudeAmsl != null ? mission.originAltitudeAmsl : mission.waypoints.get(0).altitudeAmsl;
+                d.alt = baseAlt + mission.altitudeMeters; // Высота относительно начала
 
                 // считаем курс, только если реально сдвинулись (избегаем дрожания при старте)
                 double dx = (d.lon - d.prevLon) * Math.cos(Math.toRadians(d.lat)) * 111320.0;
@@ -717,11 +724,12 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
             @Override
             public void onLocationResult(@NonNull LocationResult result) {
                 Location loc = result.getLastLocation();
-                if (loc != null && !centeredInitially) {
+                if (loc == null) return;
+                lastUserLocation = loc;
+                if (!centeredInitially) {
                     centeredInitially = true;
                     LatLng latLng = new LatLng(loc.getLatitude(), loc.getLongitude());
                     mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16.0));
-                    fusedLocationClient.removeLocationUpdates(this);
                 }
             }
         };
