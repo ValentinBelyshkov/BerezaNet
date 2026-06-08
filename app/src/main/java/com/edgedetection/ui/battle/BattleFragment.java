@@ -56,8 +56,12 @@ import com.google.common.util.concurrent.ListenableFuture;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -110,6 +114,11 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private final float[] rotationMatrix = new float[16];
     private final float[] remappedMatrix = new float[16];
     private final float[] orientation = new float[3];
+    private final float[] currentRotationVector = new float[5];
+
+    // Logging
+    private long lastLogTime = 0;
+    private static final long LOG_INTERVAL_MS = 1000;
 
     // Calibration
     private boolean isCalibrating = false;
@@ -427,9 +436,120 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
     // ===================== AR: Sensors & Scene =====================
 
+    private void logStateJson(float fx, float fy, float fz,
+                              float ux, float uy, float uz,
+                              float rx, float ry, float rz,
+                              float ndcX, float ndcY, float zCam,
+                              boolean visible) {
+        long now = System.currentTimeMillis();
+        if (now - lastLogTime < LOG_INTERVAL_MS) return;
+        lastLogTime = now;
+
+        try {
+            JSONObject root = new JSONObject();
+            root.put("timestamp", now);
+
+            JSONObject user = new JSONObject();
+            JSONObject gpsUser = new JSONObject();
+            gpsUser.put("lat", lastGoodLat);
+            gpsUser.put("lon", lastGoodLon);
+            gpsUser.put("alt", lastGoodAlt);
+            user.put("gps", gpsUser);
+
+            JSONObject sensors = new JSONObject();
+            JSONArray rv = new JSONArray();
+            for (int i = 0; i < 4; i++) rv.put(currentRotationVector[i]);
+            sensors.put("rotationVector", rv);
+            sensors.put("azimuth", Math.toDegrees(orientation[0]));
+            sensors.put("pitch", Math.toDegrees(orientation[1]));
+            sensors.put("roll", Math.toDegrees(orientation[2]));
+            user.put("sensors", sensors);
+            root.put("user", user);
+
+            JSONObject drone = new JSONObject();
+            JSONObject gpsDrone = new JSONObject();
+            gpsDrone.put("lat", droneLat);
+            gpsDrone.put("lon", droneLon);
+            gpsDrone.put("alt", droneAlt);
+            drone.put("gps", gpsDrone);
+            root.put("drone", drone);
+
+            JSONObject enuObj = new JSONObject();
+            JSONObject origin = new JSONObject();
+            origin.put("lat", hasUserLocation ? lastGoodLat : missionOriginLat);
+            origin.put("lon", hasUserLocation ? lastGoodLon : missionOriginLon);
+            enuObj.put("origin", origin);
+
+            JSONObject droneEnu = new JSONObject();
+            droneEnu.put("E", lastDroneX);
+            droneEnu.put("N", -lastDroneZ);
+            droneEnu.put("U", lastDroneY);
+            enuObj.put("drone", droneEnu);
+            root.put("enu", enuObj);
+
+            JSONObject engine = new JSONObject();
+            engine.put("convention", "Y-up, right-handed");
+            JSONObject dPos = new JSONObject();
+            dPos.put("x", lastDroneX);
+            dPos.put("y", lastDroneY);
+            dPos.put("z", lastDroneZ);
+            engine.put("dronePos", dPos);
+
+            JSONObject camera = new JSONObject();
+            camera.put("pos", new JSONObject().put("x", 0).put("y", EYE_HEIGHT).put("z", 0));
+            camera.put("forward", new JSONObject().put("x", fx).put("y", fy).put("z", fz));
+            camera.put("up", new JSONObject().put("x", ux).put("y", uy).put("z", uz));
+            camera.put("right", new JSONObject().put("x", rx).put("y", ry).put("z", rz));
+            engine.put("camera", camera);
+
+            double[] vMat = new double[16];
+            double[] pMat = new double[16];
+            arRenderer.getCamera().getViewMatrix(vMat);
+            arRenderer.getCamera().getProjectionMatrix(pMat);
+
+            JSONArray viewArray = new JSONArray();
+            for (double d : vMat) viewArray.put(d);
+            engine.put("viewMatrix", viewArray);
+
+            JSONArray projArray = new JSONArray();
+            for (double d : pMat) projArray.put(d);
+            engine.put("projectionMatrix", projArray);
+
+            float heading = (float) Math.toRadians(droneHeading) + (float) Math.PI;
+            float c = (float) Math.cos(heading), s = (float) Math.sin(heading);
+            float[] m = new float[16];
+            m[0] = c;   m[4] = 0; m[8]  = s;  m[12] = lastDroneX;
+            m[1] = 0;   m[5] = 1; m[9]  = 0;  m[13] = lastDroneY;
+            m[2] = -s;  m[6] = 0; m[10] = c;  m[14] = lastDroneZ;
+            m[3] = 0;   m[7] = 0; m[11] = 0;  m[15] = 1;
+
+            JSONArray modelArray = new JSONArray();
+            for (float f : m) modelArray.put(f);
+            engine.put("modelMatrixDrone", modelArray);
+
+            root.put("engine", engine);
+
+            JSONObject screen = new JSONObject();
+            screen.put("droneNDC", new JSONObject().put("x", ndcX).put("y", ndcY).put("z", zCam));
+
+            int w = getView() != null ? getView().getWidth() : 0;
+            int h = getView() != null ? getView().getHeight() : 0;
+            float px = w * (0.5f + 0.5f * ndcX);
+            float py = h * (0.5f - 0.5f * ndcY);
+            screen.put("dronePixel", new JSONObject().put("x", px).put("y", py));
+            screen.put("visible", visible);
+            root.put("screen", screen);
+
+            Log.i("DATA_LOG", root.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to log state", e);
+        }
+    }
+
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
+        System.arraycopy(event.values, 0, currentRotationVector, 0, Math.min(event.values.length, 5));
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
 
         // Расчет азимута для калибровки
@@ -672,13 +792,6 @@ public class BattleFragment extends Fragment implements SensorEventListener {
                 Math.abs(xCam) < zCam * tanX &&
                 Math.abs(yCam) < zCam * TAN_HALF_FOV_Y;
 
-        if (visible) {
-            offscreenIndicator.setVisibility(View.GONE);
-            return;
-        }
-
-        offscreenIndicator.setVisibility(View.VISIBLE);
-
         float ndcX, ndcY;
         if (zCam > 0.1f) {
             ndcX = xCam / (zCam * tanX);
@@ -689,6 +802,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             float m = Math.max(Math.abs(ndcX), Math.abs(ndcY));
             if (m > 0) { ndcX /= m; ndcY /= m; }
         }
+
+        logStateJson(fx, fy, fz, ux, uy, uz, rx, ry, rz, ndcX, ndcY, zCam, visible);
+
+        if (visible) {
+            offscreenIndicator.setVisibility(View.GONE);
+            return;
+        }
+
+        offscreenIndicator.setVisibility(View.VISIBLE);
 
         if (Math.abs(ndcX) > 1f || Math.abs(ndcY) > 1f) {
             float s = Math.min(1f / Math.abs(ndcX), 1f / Math.abs(ndcY));
