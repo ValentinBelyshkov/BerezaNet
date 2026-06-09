@@ -40,5 +40,30 @@ public class EdgeDetector {
         int upperThreshold,
         int blurSize
     );
+
+    /**
+     * Enhanced edge detection with targeting reticle overlay
+     *
+     * @param inputAddr  Native address of input Mat (RGBA)
+     * @param outputAddr Native address of output Mat (edges + overlays)
+     * @param lowerThreshold Lower threshold for Canny algorithm
+     * @param upperThreshold Upper threshold for Canny algorithm
+     * @param blurSize Gaussian blur kernel size
+     * @param targetX X coordinate of target center (pixels)
+     * @param targetY Y coordinate of target center (pixels)
+     * @param targetDetected Whether a target is currently detected
+     * @param aligned Whether the barrel is aligned with the lead point
+     */
+    public static native void detectEdgesWithReticle(
+        long inputAddr,
+        long outputAddr,
+        int lowerThreshold,
+        int upperThreshold,
+        int blurSize,
+        int targetX,
+        int targetY,
+        boolean targetDetected,
+        boolean aligned
+    );
 }
 
