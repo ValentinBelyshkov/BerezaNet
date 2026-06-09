@@ -29,7 +29,6 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -37,6 +36,10 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.edgedetection.R;
 import com.edgedetection.EdgeDetector;
+import com.edgedetection.core.camera.CameraManager;
+import com.edgedetection.core.camera.CameraSource;
+import com.edgedetection.core.camera.ExternalCameraSource;
+import com.edgedetection.core.camera.InternalCameraSource;
 import com.edgedetection.domain.ballistics.Bullet;
 import com.edgedetection.domain.ballistics.CalibrationPoint;
 import com.edgedetection.domain.geo.GeoUtils;
@@ -84,8 +87,11 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private EdgeDetectionGLView glView;
     private PreviewView previewView;
     private ExecutorService cameraExecutor;
-    private ProcessCameraProvider cameraProvider;
     private long lastFrameTime = 0;
+
+    // --- Camera management ---
+    private CameraManager cameraManager;
+    private Button switchCameraButton;
 
     // --- AR overlay ---
     private SurfaceView arSurface;
@@ -198,6 +204,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         calibrationMarker = view.findViewById(R.id.calibration_marker);
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
+
+        // Camera switch button
+        switchCameraButton = view.findViewById(R.id.switch_camera_button);
+        switchCameraButton.setOnClickListener(v -> {
+            if (cameraManager != null) {
+                cameraManager.toggleSource();
+                Toast.makeText(requireContext(), "Переключение камеры...", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         // Тап по экрану для установки точки калибровки
         bulletOverlay.setOnTouchListener((v, event) -> {
@@ -355,50 +370,28 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper());
     }
 
-    // ===================== CameraX (OpenCV) =====================
+    // ===================== Camera Source Handling =====================
 
     private void startCamera() {
-        cameraExecutor = Executors.newSingleThreadExecutor();
+        if (cameraExecutor == null) {
+            cameraExecutor = Executors.newSingleThreadExecutor();
+        }
 
-        ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(requireContext());
-        future.addListener(() -> {
-            try {
-                cameraProvider = future.get();
-                bindCameraUseCases();
-            } catch (Exception e) {
-                Log.e(TAG, "Camera provider failed", e);
+        if (cameraManager == null) {
+            CameraSource internal = new InternalCameraSource(requireContext(), getViewLifecycleOwner(), previewView, cameraExecutor);
+            CameraSource external = new ExternalCameraSource();
+            cameraManager = new CameraManager(internal, external);
+
+            cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
+                if (source != null) {
+                    source.start(this::processFrame);
+                }
+            });
+        } else {
+            CameraSource current = cameraManager.getCurrentSource().getValue();
+            if (current != null && !current.isRunning()) {
+                current.start(this::processFrame);
             }
-        }, ContextCompat.getMainExecutor(requireContext()));
-    }
-
-    private void bindCameraUseCases() {
-        if (cameraProvider == null) return;
-
-        Preview preview = new Preview.Builder().build();
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
-
-        ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .build();
-
-        imageAnalysis.setAnalyzer(cameraExecutor, this::processFrame);
-
-        CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                .build();
-
-        try {
-            cameraProvider.unbindAll();
-            cameraProvider.bindToLifecycle(
-                    getViewLifecycleOwner(),
-                    cameraSelector,
-                    preview,
-                    imageAnalysis
-            );
-            Log.i(TAG, "Camera bound successfully");
-        } catch (Exception e) {
-            Log.e(TAG, "Use case binding failed", e);
         }
     }
 
@@ -1011,8 +1004,8 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     public void onPause() {
         super.onPause();
         lastFrameNanos = 0;
-        if (cameraProvider != null) {
-            cameraProvider.unbindAll();
+        if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) {
+            cameraManager.getCurrentSource().getValue().stop();
         }
         if (glView != null) glView.onPause();
         if (arRenderer != null) arRenderer.onPause();
@@ -1030,9 +1023,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         if (choreographer != null) {
             choreographer.removeFrameCallback(frameCallback);
         }
-        if (cameraProvider != null) {
-            cameraProvider.unbindAll();
-            cameraProvider = null;
+        if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) {
+            cameraManager.getCurrentSource().getValue().stop();
+            cameraManager = null;
         }
         if (cameraExecutor != null) {
             cameraExecutor.shutdown();
