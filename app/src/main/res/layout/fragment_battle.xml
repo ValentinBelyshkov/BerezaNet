@@ -47,6 +47,31 @@ android:layout_height="match_parent">
     android:layout_gravity="top|center_horizontal"
     android:layout_marginTop="24dp" />
 
+<!-- Маркер калибровочной точки (появляется при тапе) -->
+<ImageView
+    android:id="@+id/calibration_marker"
+    android:layout_width="24dp"
+    android:layout_height="24dp"
+    android:src="@drawable/ic_crosshair"
+    android:visibility="gone"
+    android:contentDescription="Точка упреждения" />
+
+<!-- Кнопка калибровки -->
+<android.widget.Button
+    android:id="@+id/calibrate_button"
+    android:layout_width="wrap_content"
+    android:layout_height="48dp"
+    android:layout_gravity="start|bottom"
+    android:layout_marginStart="16dp"
+    android:layout_marginBottom="40dp"
+    android:background="#CC000000"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:text="Калибровка"
+    android:contentDescription="Калибровка" />
+
 <!-- Кнопка огня -->
 <ImageButton
     android:id="@+id/fire_button"

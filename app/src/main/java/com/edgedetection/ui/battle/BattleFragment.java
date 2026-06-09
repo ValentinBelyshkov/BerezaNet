@@ -17,6 +17,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -37,6 +38,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.edgedetection.R;
 import com.edgedetection.EdgeDetector;
 import com.edgedetection.domain.ballistics.Bullet;
+import com.edgedetection.domain.ballistics.CalibrationPoint;
 import com.edgedetection.domain.geo.GeoUtils;
 import com.edgedetection.domain.mission.DronePosition;
 import com.edgedetection.domain.mission.Mission;
@@ -95,6 +97,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private BulletTrajectoryView bulletOverlay;
     private ImageButton fireButton;
     private final List<Bullet> bullets = new ArrayList<>();
+
+    // --- Calibration UI ---
+    private Button calibrateButton;
+    private ImageView calibrationMarker;
     private long lastFrameNanos = 0;
     private float camForwardX, camForwardY, camForwardZ;
     private float camUpX, camUpY, camUpZ;
@@ -186,6 +192,47 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         bulletOverlay = view.findViewById(R.id.bullet_overlay);
         fireButton = view.findViewById(R.id.fire_button);
         fireButton.setOnClickListener(v -> fireBullet());
+
+        // Calibration UI
+        calibrateButton = view.findViewById(R.id.calibrate_button);
+        calibrationMarker = view.findViewById(R.id.calibration_marker);
+
+        calibrateButton.setOnClickListener(v -> handleCalibrateClick());
+
+        // Тап по экрану для установки точки калибровки
+        bulletOverlay.setOnTouchListener((v, event) -> {
+            if (Boolean.TRUE.equals(viewModel.isCalibrationActive().getValue())) {
+                float nx = event.getX() / v.getWidth();
+                float ny = event.getY() / v.getHeight();
+                viewModel.setCalibrationPosition(nx, ny);
+                updateCalibrationMarker(nx, ny);
+                return true;
+            }
+            return false;
+        });
+
+        // Наблюдаем состояние калибровки
+        viewModel.isCalibrationActive().observe(getViewLifecycleOwner(), active -> {
+            if (Boolean.TRUE.equals(active)) {
+                calibrateButton.setText("Подтвердить");
+                Toast.makeText(requireContext(), "Нажми на экран где был выстрел", Toast.LENGTH_LONG).show();
+            } else {
+                CalibrationPoint cp = viewModel.getCalibrationPoint().getValue();
+                if (cp == null || !cp.confirmed) {
+                    calibrateButton.setText("Калибровка");
+                    calibrationMarker.setVisibility(View.GONE);
+                }
+            }
+        });
+
+        viewModel.getCalibrationPoint().observe(getViewLifecycleOwner(), cp -> {
+            if (cp != null && cp.confirmed) {
+                calibrateButton.setText("Калибровка");
+                Toast.makeText(requireContext(),
+                        "Калибровка сохранена: (" + String.format("%.2f", cp.x) + ", " + String.format("%.2f", cp.y) + ")",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
 
         arRenderer = new Filament3DRenderer(requireContext(), arSurface, true);
         arRenderer.setFarPlane(2000.0);
@@ -465,6 +512,49 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             frameScheduled = true;
             choreographer.postFrameCallback(frameCallback);
         }
+    }
+
+    // ===================== Calibration =====================
+
+    private void handleCalibrateClick() {
+        Boolean active = viewModel.isCalibrationActive().getValue();
+        CalibrationPoint current = viewModel.getCalibrationPoint().getValue();
+
+        if (Boolean.TRUE.equals(active)) {
+            // Режим калибровки — нажатие на "Подтвердить"
+            if (current != null && !current.confirmed) {
+                viewModel.confirmCalibration();
+                calibrationMarker.setVisibility(View.VISIBLE);
+                updateCalibrationMarker(current.x, current.y);
+            } else {
+                // Точка не выбрана — отменяем калибровку
+                viewModel.cancelCalibration();
+                calibrateButton.setText("Калибровка");
+                calibrationMarker.setVisibility(View.GONE);
+            }
+        } else if (current != null && current.confirmed) {
+            // Уже есть подтверждённая калибровка — сбрасываем
+            viewModel.cancelCalibration();
+            calibrateButton.setText("Калибровка");
+            calibrationMarker.setVisibility(View.GONE);
+        } else {
+            // Начинаем калибровку
+            viewModel.startCalibration();
+        }
+    }
+
+    private void updateCalibrationMarker(float nx, float ny) {
+        if (calibrationMarker == null || getView() == null) return;
+        int w = getView().getWidth();
+        int h = getView().getHeight();
+        if (w == 0 || h == 0) return;
+
+        float px = nx * w - calibrationMarker.getWidth() / 2f;
+        float py = ny * h - calibrationMarker.getHeight() / 2f;
+
+        calibrationMarker.setX(px);
+        calibrationMarker.setY(py);
+        calibrationMarker.setVisibility(View.VISIBLE);
     }
 
     // ===================== Bullet firing =====================
