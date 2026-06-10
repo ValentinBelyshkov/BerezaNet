@@ -9,6 +9,7 @@ import android.hardware.SensorManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Choreographer;
@@ -45,6 +46,7 @@ import com.edgedetection.domain.ballistics.CalibrationPoint;
 import com.edgedetection.domain.geo.GeoUtils;
 import com.edgedetection.domain.mission.DronePosition;
 import com.edgedetection.domain.mission.Mission;
+import com.edgedetection.jni.VITTracker;
 import com.edgedetection.opengl.EdgeDetectionGLView;
 import com.edgedetection.opengl.Filament3DRenderer;
 import com.edgedetection.ui.shared.MissionViewModel;
@@ -72,6 +74,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private static final String TAG = "BattleFragment";
     private static final int CAMERA_PERMISSION_REQUEST = 1;
     private static final int AR_PERMISSION_REQUEST = 3;
+    private static final float TARGET_WIDTH_M = 2.0f;
+    private static final float TARGET_LENGTH_M = 4.0f;
+    private static final float T_FLIGHT_SEC = 2.0f;
 
     static {
         try {
@@ -81,6 +86,14 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             Log.e(TAG, "OpenCV failed: " + e.getMessage());
         }
     }
+
+    // --- VIT Tracker ---
+    private VITTracker vitTracker;
+    private volatile float lastGyroX = 0f, lastGyroY = 0f, lastGyroZ = 0f;
+    private volatile long lastGyroTimestampNs = 0;
+    private Handler imuHandler;
+    private Sensor gyroscopeSensor;
+    private volatile VITTracker.TargetState lastTargetState = VITTracker.TargetState.EMPTY;
 
     // --- OpenCV / CameraX ---
     private BattleViewModel viewModel;
@@ -107,6 +120,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     // --- Calibration UI ---
     private Button calibrateButton;
     private ImageView calibrationMarker;
+    private TextView vitInfoText;
     private long lastFrameNanos = 0;
     private float camForwardX, camForwardY, camForwardZ;
     private float camUpX, camUpY, camUpZ;
@@ -173,6 +187,32 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         sensorManager = (SensorManager) requireContext().getSystemService(android.content.Context.SENSOR_SERVICE);
         rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         choreographer = Choreographer.getInstance();
+
+        // Инициализация VIT Tracker
+        vitTracker = new VITTracker();
+        boolean vitOk = vitTracker.init(requireContext(), TARGET_WIDTH_M, TARGET_LENGTH_M);
+        Log.i(TAG, "VIT Tracker init: " + vitOk);
+
+        // IMU HandlerThread
+        HandlerThread imuThread = new HandlerThread("IMU");
+        imuThread.start();
+        imuHandler = new Handler(imuThread.getLooper());
+
+        // Регистрируем гироскоп на фоновом потоке
+        gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+        if (gyroscopeSensor != null) {
+            sensorManager.registerListener(this, gyroscopeSensor,
+                    SensorManager.SENSOR_DELAY_GAME, imuHandler);
+            Log.i(TAG, "Gyroscope registered on IMU thread");
+        } else {
+            Log.w(TAG, "Gyroscope not available on this device");
+        }
+
+        // Также регистрируем rotation vector на фоновом потоке
+        if (rotationVectorSensor != null) {
+            sensorManager.registerListener(this, rotationVectorSensor,
+                    SensorManager.SENSOR_DELAY_GAME, imuHandler);
+        }
     }
 
     @Nullable
@@ -202,6 +242,7 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         // Calibration UI
         calibrateButton = view.findViewById(R.id.calibrate_button);
         calibrationMarker = view.findViewById(R.id.calibration_marker);
+        vitInfoText = view.findViewById(R.id.vit_info);
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
 
@@ -400,12 +441,54 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             int width = image.getWidth();
             int height = image.getHeight();
 
-            byte[] bytes = new byte[image.getPlanes()[0].getBuffer().remaining()];
-            image.getPlanes()[0].getBuffer().get(bytes);
+            long frameTimestampNs = image.getImageInfo().getTimestamp();
+
+            // Get RGBA data as ByteBuffer for VIT tracker
+            ImageProxy.PlaneProxy[] planes = image.getPlanes();
+            ByteBuffer yBuffer = planes[0].getBuffer();
+            int ySize = yBuffer.remaining();
+
+            // Convert YUV_420_888 to RGBA using OpenCV
+            byte[] yuvBytes = new byte[image.getPlanes()[0].getBuffer().remaining()
+                    + image.getPlanes()[1].getBuffer().remaining()
+                    + image.getPlanes()[2].getBuffer().remaining()];
+
+            int offset = 0;
+            for (int i = 0; i < 3; i++) {
+                ByteBuffer buffer = image.getPlanes()[i].getBuffer();
+                byte[] planeData = new byte[buffer.remaining()];
+                buffer.get(planeData);
+                System.arraycopy(planeData, 0, yuvBytes, offset, planeData.length);
+                offset += planeData.length;
+            }
+
+            Mat yuvMat = new Mat(height + height / 2, width, CvType.CV_8UC1);
+            yuvMat.put(0, 0, yuvBytes);
 
             Mat rgba = new Mat(height, width, CvType.CV_8UC4);
-            rgba.put(0, 0, bytes);
+            org.opencv.imgproc.Imgproc.cvtColor(yuvMat, rgba, org.opencv.imgproc.Imgproc.COLOR_YUV2RGBA_NV21);
 
+            yuvMat.release();
+
+            // ======== VIT Tracker processing ========
+            if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
+                int bufSize = rgba.width() * rgba.height() * 4;
+                ByteBuffer rgbaBuffer = ByteBuffer.allocateDirect(bufSize);
+                byte[] rgbaBytes = new byte[bufSize];
+                rgba.get(0, 0, rgbaBytes);
+                rgbaBuffer.put(rgbaBytes);
+                rgbaBuffer.position(0);
+
+                lastTargetState = vitTracker.processFrame(
+                        rgbaBuffer,
+                        rgba.width(), rgba.height(),
+                        frameTimestampNs,
+                        lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs,
+                        T_FLIGHT_SEC
+                );
+            }
+
+            // ======== Edge detection with reticle ========
             long currentTime = System.currentTimeMillis();
             if (lastFrameTime != 0) {
                 double fps = 1000.0 / (currentTime - lastFrameTime);
@@ -420,10 +503,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             }
 
             if (EdgeDetector.isLibraryLoaded() && edges != null) {
-                EdgeDetector.detectEdges(
+                VITTracker.TargetState ts = lastTargetState;
+                EdgeDetector.detectEdgesWithReticle(
                         rgba.getNativeObjAddr(),
                         edges.getNativeObjAddr(),
-                        50, 150, 5
+                        50, 150, 5,
+                        ts.detected ? Math.round(ts.bboxX + ts.bboxW / 2f) : 0,
+                        ts.detected ? Math.round(ts.bboxY + ts.bboxH / 2f) : 0,
+                        ts.detected,
+                        false
                 );
                 if (glView != null) glView.updateFrame(edges);
             } else {
@@ -473,6 +561,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+            // Store latest gyro sample for VIT tracker
+            lastGyroX = event.values[0];
+            lastGyroY = event.values[1];
+            lastGyroZ = event.values[2];
+            lastGyroTimestampNs = event.timestamp;
+            return;
+        }
+
         if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
         System.arraycopy(event.values, 0, lastRotationVector, 0, Math.min(event.values.length, lastRotationVector.length));
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
@@ -728,6 +825,9 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             bulletOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
             bulletOverlay.setBullets(bullets);
         }
+
+        // 6. VIT Tracker info
+        updateVITInfo();
     }
 
     private boolean isDroneVisible(float fx, float fy, float fz, float ux, float uy, float uz) {
@@ -973,6 +1073,34 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         offscreenIndicator.setRotation(angle);
     }
 
+    /**
+     * Отображает информацию VIT трекера
+     */
+    private void updateVITInfo() {
+        if (vitInfoText == null) return;
+
+        VITTracker.TargetState ts = lastTargetState;
+        if (ts == null || !ts.detected) {
+            vitInfoText.setText("VIT: поиск...");
+            return;
+        }
+
+        String info = String.format(
+            "VIT: %s | D=%.0fм | V=(%.1f,%.1f,%.1f)м/с\nAz=%.1f° El=%.1f° | C=%.2f",
+            ts.tracking ? "ТРЕКИНГ" : "DETECT",
+            ts.distanceM,
+            ts.velX, ts.velY, ts.velZ,
+            ts.azimuthDeg, ts.elevationDeg,
+            ts.confidence
+        );
+
+        if (ts.tracking) {
+            info += String.format("\nLead: (%.1f,%.1f,%.1f)м", ts.leadX, ts.leadY, ts.leadZ);
+        }
+
+        vitInfoText.setText(info);
+    }
+
     // ===================== Lifecycle =====================
 
     @Override
@@ -987,7 +1115,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             calibSumX = 0f;
             calibSumY = 0f;
             calibCount = 0;
-            sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME);
+            sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME, imuHandler);
+        }
+        // Перерегистрируем гироскоп
+        if (gyroscopeSensor != null) {
+            sensorManager.registerListener(this, gyroscopeSensor,
+                    SensorManager.SENSOR_DELAY_GAME, imuHandler);
+        }
+        if (vitTracker != null) {
+            vitTracker.reset();
         }
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -1012,6 +1148,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         sensorManager.unregisterListener(this);
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+        // Сброс VIT при паузе (очищаем IMU буфер, но не удаляем калибровку)
+        if (vitTracker != null) {
+            vitTracker.reset();
         }
         requireActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
@@ -1039,6 +1179,15 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         if (arRenderer != null) {
             arRenderer.destroy();
             arRenderer = null;
+        }
+        // Освобождение VIT
+        if (vitTracker != null) {
+            vitTracker.release();
+            vitTracker = null;
+        }
+        if (imuHandler != null) {
+            imuHandler.getLooper().quit();
+            imuHandler = null;
         }
     }
 }

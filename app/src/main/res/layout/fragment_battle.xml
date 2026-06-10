@@ -89,15 +89,30 @@ android:layout_height="match_parent">
     android:contentDescription="Смена камеры" />
 
 <!-- Кнопка огня -->
-<ImageButton
-    android:id="@+id/fire_button"
-    android:layout_width="80dp"
-    android:layout_height="80dp"
-    android:layout_gravity="bottom|center_horizontal"
-    android:layout_marginBottom="40dp"
-    android:background="@drawable/bg_fire_button"
-    android:src="@android:drawable/ic_menu_send"
-    android:tint="#FFFFFF"
-    android:contentDescription="Огонь" />
+    <ImageButton
+        android:id="@+id/fire_button"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="40dp"
+        android:background="@drawable/bg_fire_button"
+        android:src="@android:drawable/ic_menu_send"
+        android:tint="#FFFFFF"
+        android:contentDescription="Огонь" />
+
+    <!-- VIT Info overlay -->
+    <TextView
+        android:id="@+id/vit_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|top"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="48dp"
+        android:textColor="#00FF00"
+        android:textSize="11sp"
+        android:background="#AA000000"
+        android:padding="6dp"
+        android:visibility="visible"
+        android:contentDescription="VIT Информация" />
 
 </FrameLayout>
