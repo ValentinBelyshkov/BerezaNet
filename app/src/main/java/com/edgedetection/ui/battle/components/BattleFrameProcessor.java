@@ -39,27 +39,64 @@ public class BattleFrameProcessor {
             int height = image.getHeight();
             long frameTimestampNs = image.getImageInfo().getTimestamp();
 
-            // Convert YUV_420_888 to RGBA using OpenCV
-            byte[] yuvBytes = new byte[image.getPlanes()[0].getBuffer().remaining()
-                    + image.getPlanes()[1].getBuffer().remaining()
-                    + image.getPlanes()[2].getBuffer().remaining()];
+            Mat rgba;
+            if (image.getPlanes().length == 1) {
+                rgba = new Mat(height, width, CvType.CV_8UC4);
+                ImageProxy.PlaneProxy plane = image.getPlanes()[0];
+                ByteBuffer buffer = plane.getBuffer();
+                int rowStride = plane.getRowStride();
+                int pixelStride = plane.getPixelStride();
 
-            int offset = 0;
-            for (int i = 0; i < 3; i++) {
-                ByteBuffer buffer = image.getPlanes()[i].getBuffer();
-                byte[] planeData = new byte[buffer.remaining()];
-                buffer.get(planeData);
-                System.arraycopy(planeData, 0, yuvBytes, offset, planeData.length);
-                offset += planeData.length;
+                if (rowStride == width * 4 && pixelStride == 4 && buffer.remaining() >= width * height * 4) {
+                    byte[] bytes = new byte[width * height * 4];
+                    int bufferOriginalPosition = buffer.position();
+                    buffer.get(bytes);
+                    rgba.put(0, 0, bytes);
+                    buffer.position(bufferOriginalPosition); // restore
+                } else {
+                    byte[] rowBytes = new byte[width * 4];
+                    int bufferOriginalPosition = buffer.position();
+                    for (int row = 0; row < height; row++) {
+                        buffer.position(bufferOriginalPosition + row * rowStride);
+                        if (pixelStride == 4) {
+                            buffer.get(rowBytes);
+                            rgba.put(row, 0, rowBytes);
+                        } else {
+                            for (int col = 0; col < width; col++) {
+                                int offset = col * pixelStride;
+                                rowBytes[col * 4] = buffer.get(buffer.position() + offset);
+                                rowBytes[col * 4 + 1] = buffer.get(buffer.position() + offset + 1);
+                                rowBytes[col * 4 + 2] = buffer.get(buffer.position() + offset + 2);
+                                rowBytes[col * 4 + 3] = buffer.get(buffer.position() + offset + 3);
+                            }
+                            rgba.put(row, 0, rowBytes);
+                        }
+                    }
+                    buffer.position(bufferOriginalPosition); // restore position
+                }
+            } else {
+                // Convert YUV_420_888 to RGBA using OpenCV
+                byte[] yuvBytes = new byte[image.getPlanes()[0].getBuffer().remaining()
+                        + image.getPlanes()[1].getBuffer().remaining()
+                        + image.getPlanes()[2].getBuffer().remaining()];
+
+                int offset = 0;
+                for (int i = 0; i < 3; i++) {
+                    ByteBuffer buffer = image.getPlanes()[i].getBuffer();
+                    byte[] planeData = new byte[buffer.remaining()];
+                    buffer.get(planeData);
+                    System.arraycopy(planeData, 0, yuvBytes, offset, planeData.length);
+                    offset += planeData.length;
+                }
+
+                Mat yuvMat = new Mat(height + height / 2, width, CvType.CV_8UC1);
+                yuvMat.put(0, 0, yuvBytes);
+
+                rgba = new Mat(height, width, CvType.CV_8UC4);
+                org.opencv.imgproc.Imgproc.cvtColor(yuvMat, rgba, org.opencv.imgproc.Imgproc.COLOR_YUV2RGBA_NV21);
+
+                yuvMat.release();
             }
-
-            Mat yuvMat = new Mat(height + height / 2, width, CvType.CV_8UC1);
-            yuvMat.put(0, 0, yuvBytes);
-
-            Mat rgba = new Mat(height, width, CvType.CV_8UC4);
-            org.opencv.imgproc.Imgproc.cvtColor(yuvMat, rgba, org.opencv.imgproc.Imgproc.COLOR_YUV2RGBA_NV21);
-
-            yuvMat.release();
 
             // ======== VIT Tracker processing ========
             if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
