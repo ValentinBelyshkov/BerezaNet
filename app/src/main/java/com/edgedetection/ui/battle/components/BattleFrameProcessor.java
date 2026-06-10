@@ -93,7 +93,10 @@ public class BattleFrameProcessor {
                 edges = viewModel.getEdges();
             }
 
-            if (EdgeDetector.isLibraryLoaded() && edges != null) {
+            Boolean edgeEnabled = viewModel.isEdgeDetectionEnabled().getValue();
+            if (edgeEnabled == null) edgeEnabled = false;
+
+            if (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) {
                 VITTracker.TargetState ts = lastTargetState;
                 EdgeDetector.detectEdgesWithReticle(
                         rgba.getNativeObjAddr(),

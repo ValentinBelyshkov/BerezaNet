@@ -88,6 +88,22 @@ android:layout_height="match_parent">
     android:text="Смена камеры"
     android:contentDescription="Смена камеры" />
 
+<!-- Кнопка переключения обработки (Edge Detector) -->
+<android.widget.Button
+    android:id="@+id/toggle_edges_button"
+    android:layout_width="wrap_content"
+    android:layout_height="48dp"
+    android:layout_gravity="start|bottom"
+    android:layout_marginStart="16dp"
+    android:layout_marginBottom="152dp"
+    android:background="#CC000000"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:text="Обработка: Выкл"
+    android:contentDescription="Переключение обработки" />
+
 <!-- Кнопка огня -->
     <ImageButton
         android:id="@+id/fire_button"
