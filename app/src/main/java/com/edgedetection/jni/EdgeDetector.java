@@ -10,6 +10,13 @@ public class EdgeDetector {
     // Load native library
     static {
         try {
+            System.loadLibrary("opencv_java4");
+            Log.i(TAG, "OpenCV native library loaded successfully in EdgeDetector!");
+        } catch (UnsatisfiedLinkError e) {
+            Log.w(TAG, "Failed to load opencv_java4 in EdgeDetector static block: " + e.getMessage());
+        }
+
+        try {
             System.loadLibrary("edge_detection");
             libraryLoaded = true;
             Log.i(TAG, "Native edge_detection library loaded successfully!");
