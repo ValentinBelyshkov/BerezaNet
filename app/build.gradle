@@ -18,7 +18,13 @@ android {
             cmake {
                 cppFlags "-frtti -fexceptions"
                 abiFilters 'arm64-v8a', 'armeabi-v7a'
-                arguments "-DANDROID_STL=c++_shared"
+                def opencvDir = ""
+                if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                    opencvDir = "C:/OpenCV-android-sdk/sdk/native/jni"
+                } else {
+                    opencvDir = "${project.rootDir}/C:/OpenCV-android-sdk/sdk/native/jni"
+                }
+                arguments "-DANDROID_STL=c++_shared", "-DOpenCV_DIR=${opencvDir}"
             }
         }
         
