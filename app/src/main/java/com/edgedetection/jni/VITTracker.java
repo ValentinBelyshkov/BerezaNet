@@ -20,6 +20,13 @@ public class VITTracker {
 
     static {
         try {
+            System.loadLibrary("opencv_java4");
+            Log.i(TAG, "OpenCV native library loaded successfully in VITTracker!");
+        } catch (UnsatisfiedLinkError e) {
+            Log.w(TAG, "Failed to load opencv_java4 in VITTracker static block: " + e.getMessage());
+        }
+
+        try {
             System.loadLibrary("vit_tracker");
             libraryLoaded = true;
             Log.i(TAG, "Native vit_tracker library loaded successfully!");

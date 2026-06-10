@@ -21,6 +21,20 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import org.maplibre.android.MapLibre;
 
 public class MainActivity extends AppCompatActivity {
+    static {
+        if (!org.opencv.android.OpenCVLoader.initDebug()) {
+            android.util.Log.e("MainActivity", "OpenCVLoader.initDebug() failed, trying System.loadLibrary...");
+            try {
+                System.loadLibrary("opencv_java4");
+                android.util.Log.i("MainActivity", "OpenCV loaded successfully via System.loadLibrary");
+            } catch (UnsatisfiedLinkError e) {
+                android.util.Log.e("MainActivity", "Failed to load OpenCV via System.loadLibrary: " + e.getMessage());
+            }
+        } else {
+            android.util.Log.i("MainActivity", "OpenCVLoader.initDebug() succeeded");
+        }
+    }
+
     private AppViewModel appViewModel;
     private BottomNavigationView bottomNav;
     private MissionViewModel missionViewModel;
