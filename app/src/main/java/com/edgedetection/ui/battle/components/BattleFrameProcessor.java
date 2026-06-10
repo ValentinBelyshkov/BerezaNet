@@ -135,14 +135,39 @@ public class BattleFrameProcessor {
 
             if (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) {
                 VITTracker.TargetState ts = lastTargetState;
+                int targetX = 0;
+                int targetY = 0;
+                boolean aligned = false;
+
+                if (ts != null && ts.detected) {
+                    if (ts.leadZ > 0.1f) {
+                        float scaleX = width / 640.0f;
+                        float scaleY = height / 480.0f;
+                        float fx = 640.0f * scaleX;
+                        float fy = 640.0f * scaleY;
+                        float cx = 320.0f * scaleX;
+                        float cy = 240.0f * scaleY;
+                        targetX = Math.round((ts.leadX * fx) / ts.leadZ + cx);
+                        targetY = Math.round((ts.leadY * fy) / ts.leadZ + cy);
+                    }
+                    if (targetX <= 0 || targetY <= 0 || targetX >= width || targetY >= height) {
+                        targetX = Math.round(ts.bboxX + ts.bboxW / 2f);
+                        targetY = Math.round(ts.bboxY + ts.bboxH / 2f);
+                    }
+                    double dx = targetX - (width / 2.0);
+                    double dy = targetY - (height / 2.0);
+                    double dist = Math.sqrt(dx * dx + dy * dy);
+                    aligned = (dist <= 20.0);
+                }
+
                 EdgeDetector.detectEdgesWithReticle(
                         rgba.getNativeObjAddr(),
                         edges.getNativeObjAddr(),
                         50, 150, 5,
-                        ts.detected ? Math.round(ts.bboxX + ts.bboxW / 2f) : 0,
-                        ts.detected ? Math.round(ts.bboxY + ts.bboxH / 2f) : 0,
-                        ts.detected,
-                        false
+                        targetX,
+                        targetY,
+                        ts != null && ts.detected,
+                        aligned
                 );
                 if (glView != null) glView.updateFrame(edges);
             } else {

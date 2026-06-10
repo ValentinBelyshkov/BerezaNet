@@ -119,9 +119,9 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
 
         // ======== 2. ОВЕРЛЕИ ПРИЦЕЛА ========
 
-        // 2.1 Красная точка — ствол (всегда по центру экрана)
-        // Было: drawCrosshair(output, screenCenter, COLOR_RED, CROSS_SIZE, CROSS_THICKNESS);
+        // 2.1 Красная точка — ствол (всегда по центру экрана) + отображение перекрестия
         circle(output, screenCenter, DOT_RADIUS, COLOR_RED, -1, LINE_AA);
+        drawPlusCrosshair(output, screenCenter, COLOR_RED, CROSS_SIZE, CROSS_THICKNESS);
 
         // 2.2 Жёлтый квадрат — точка упреждения ИИ (только при детекции)
         if (targetDetected) {
@@ -131,7 +131,15 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
             if (aimPoint.x >= 0 && aimPoint.x < frameW &&
                 aimPoint.y >= 0 && aimPoint.y < frameH) {
 
-                drawAimSquare(output, aimPoint, COLOR_YELLOW, SQUARE_SIZE, SQUARE_THICKNESS);
+                double dist = norm(screenCenter - aimPoint);
+                bool isAligned = aligned || (dist <= 20.0);
+
+                if (isAligned) {
+                    // Становится зеленым и в 2 раза больше желтого квадрата
+                    drawAimSquare(output, aimPoint, COLOR_GREEN, SQUARE_SIZE * 2, SQUARE_THICKNESS);
+                } else {
+                    drawAimSquare(output, aimPoint, COLOR_YELLOW, SQUARE_SIZE, SQUARE_THICKNESS);
+                }
 
                 // Линия от центра к точке упреждения (визуализация вектора)
                 line(output, screenCenter, aimPoint,
@@ -140,7 +148,9 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
         }
 
         // 2.3 Зелёное перекрестие — совмещение (цель захвачена)
-        if (aligned && targetDetected) {
+        double dist = targetDetected ? norm(screenCenter - Point(targetX, targetY)) : 999.0;
+        bool isAligned = aligned || (targetDetected && dist <= 20.0);
+        if (isAligned && targetDetected) {
             // Рисуем поверх красной точки или рядом — здесь делаем "двойное" перекрестие
             // Зелёное + поверх красной точки = визуальный сигнал "готов к огню"
             drawPlusCrosshair(output, screenCenter, COLOR_GREEN, CROSS_SIZE - 5, CROSS_THICKNESS + 1);
@@ -158,12 +168,12 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
         String upperText = "Upper: " + std::to_string(upperThreshold);
         String blurText = "Blur: " + std::to_string(kernelSize);
 
-       // putText(output, lowerText, Point(10, 50),
-       //         FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
-       // putText(output, upperText, Point(10, 100),
-       //         FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
-      //  putText(output, blurText, Point(10, 150),
-      //          FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
+        // putText(output, lowerText, Point(10, 50),
+        //         FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
+        // putText(output, upperText, Point(10, 100),
+        //         FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
+        //  putText(output, blurText, Point(10, 150),
+        //          FONT_HERSHEY_SIMPLEX, 1.0, COLOR_TEXT, 2);
 
         // Отладочный текст
         if (targetDetected) {
@@ -171,7 +181,7 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
             putText(output, aimText, Point(10, 200),
                     FONT_HERSHEY_SIMPLEX, 0.7, COLOR_YELLOW, 2);
         }
-        output = input;
+
         // ======== 4. ОЧИСТКА ========
         gray.release();
         blurred.release();
