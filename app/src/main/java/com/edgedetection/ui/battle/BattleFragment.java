@@ -85,6 +85,7 @@ public class BattleFragment extends Fragment {
     private ImageView calibrationMarker;
     private TextView vitInfoText;
     private Button calibrateButton;
+    private Button toggleEdgesButton;
     private TextView gpsWarning;
 
     // --- Simulation state ---
@@ -185,6 +186,7 @@ public class BattleFragment extends Fragment {
         calibrationMarker = view.findViewById(R.id.calibration_marker);
         vitInfoText = view.findViewById(R.id.vit_info);
         calibrateButton = view.findViewById(R.id.calibrate_button);
+        toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
 
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
             ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
@@ -195,6 +197,12 @@ public class BattleFragment extends Fragment {
                 cameraManager.toggleSource();
                 Toast.makeText(requireContext(), "Переключение камеры...", Toast.LENGTH_SHORT).show();
             }
+        });
+
+        toggleEdgesButton.setOnClickListener(v -> {
+            Boolean current = viewModel.isEdgeDetectionEnabled().getValue();
+            if (current == null) current = false;
+            viewModel.setEdgeDetectionEnabled(!current);
         });
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
@@ -212,6 +220,14 @@ public class BattleFragment extends Fragment {
     }
 
     private void setupObservers() {
+        viewModel.isEdgeDetectionEnabled().observe(getViewLifecycleOwner(), enabled -> {
+            if (Boolean.TRUE.equals(enabled)) {
+                toggleEdgesButton.setText("Обработка: Вкл");
+            } else {
+                toggleEdgesButton.setText("Обработка: Выкл");
+            }
+        });
+
         viewModel.isCalibrationActive().observe(getViewLifecycleOwner(), active -> {
             if (Boolean.TRUE.equals(active)) {
                 calibrateButton.setText("Подтвердить");

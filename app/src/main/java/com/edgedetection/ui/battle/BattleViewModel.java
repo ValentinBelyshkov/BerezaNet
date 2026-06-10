@@ -27,6 +27,9 @@ public class BattleViewModel extends AndroidViewModel {
     private final MutableLiveData<Boolean> calibrationActive = new MutableLiveData<>(false);
     private final MutableLiveData<CalibrationPoint> calibrationPoint = new MutableLiveData<>(null);
 
+    // --- Edge Detection state ---
+    private final MutableLiveData<Boolean> edgeDetectionEnabled = new MutableLiveData<>(false);
+
     public BattleViewModel(@NonNull Application application) {
         super(application);
     }
@@ -100,6 +103,14 @@ public class BattleViewModel extends AndroidViewModel {
     }
 
     // ===================== Edge Detection =====================
+
+    public LiveData<Boolean> isEdgeDetectionEnabled() {
+        return edgeDetectionEnabled;
+    }
+
+    public void setEdgeDetectionEnabled(boolean enabled) {
+        edgeDetectionEnabled.setValue(enabled);
+    }
 
     public MutableLiveData<Integer> getLowerThreshold() {
         return lowerThreshold;
