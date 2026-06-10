@@ -150,6 +150,25 @@ public class BattleFragment extends Fragment implements SensorEventListener {
     private float initialAzimuth = 0f;
     private boolean calibrationDone = false;
 
+    // Periodic compass recalibration every 5 seconds
+    private Handler calibrationHandler;
+    private static final long CALIBRATION_INTERVAL_MS = 5000;
+    private final Runnable calibrationRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAdded() || isDetached()) return;
+            Log.d(TAG, "Compass recalibration trigger (every 5s)");
+            // Reset calibration state to start fresh recalibration
+            isCalibrating = true;
+            calibrationDone = false;
+            calibSumX = 0f;
+            calibSumY = 0f;
+            calibCount = 0;
+            // Schedule next recalibration
+            calibrationHandler.postDelayed(this, CALIBRATION_INTERVAL_MS);
+        }
+    };
+
     // Drone state
     private volatile double droneLat, droneLon, droneAlt;
     private volatile float droneHeading = 0f;
@@ -1117,6 +1136,12 @@ public class BattleFragment extends Fragment implements SensorEventListener {
             calibCount = 0;
             sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME, imuHandler);
         }
+        // Запускаем периодическую перекалибровку компаса каждые 5 секунд
+        if (calibrationHandler == null) {
+            calibrationHandler = new Handler(Looper.getMainLooper());
+        }
+        calibrationHandler.removeCallbacks(calibrationRunnable);
+        calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
         // Перерегистрируем гироскоп
         if (gyroscopeSensor != null) {
             sensorManager.registerListener(this, gyroscopeSensor,
@@ -1146,6 +1171,10 @@ public class BattleFragment extends Fragment implements SensorEventListener {
         if (glView != null) glView.onPause();
         if (arRenderer != null) arRenderer.onPause();
         sensorManager.unregisterListener(this);
+        // Останавливаем периодическую перекалибровку компаса
+        if (calibrationHandler != null) {
+            calibrationHandler.removeCallbacks(calibrationRunnable);
+        }
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
