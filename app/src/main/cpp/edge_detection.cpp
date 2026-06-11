@@ -171,7 +171,6 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
             putText(output, aimText, Point(10, 200),
                     FONT_HERSHEY_SIMPLEX, 0.7, COLOR_YELLOW, 2);
         }
-        output = input;
         // ======== 4. ОЧИСТКА ========
         gray.release();
         blurred.release();
