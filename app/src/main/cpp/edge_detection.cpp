@@ -12,7 +12,7 @@ using namespace cv;
 const int CROSS_SIZE = 40;      // Размер перекрестия (зелёного)
 const int CROSS_THICKNESS = 3;  // Толщина линий
 const int SQUARE_SIZE = 30;     // Размер квадрата упреждения
-const int SQUARE_THICKNESS = 4;
+const int SQUARE_THICKNESS = 8; // Was 4
 const int DOT_RADIUS = 5;       // Радиус красной точки (ствол)
 
 // Цвета в RGBA
@@ -171,7 +171,7 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
             putText(output, aimText, Point(10, 200),
                     FONT_HERSHEY_SIMPLEX, 0.7, COLOR_YELLOW, 2);
         }
-        output = input;
+
         // ======== 4. ОЧИСТКА ========
         gray.release();
         blurred.release();

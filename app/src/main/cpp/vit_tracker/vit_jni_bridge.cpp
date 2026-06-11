@@ -63,7 +63,7 @@ Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
     if (!g_tracker) {
         // Return empty state
         jmethodID constructor = env->GetMethodID(stateClass, "<init>",
-            "(ZZFFFFFFFFFFF)V");
+            "(ZZFFFFFFFFFFFFFFFFF)V");
         if (!constructor) return nullptr;
         return env->NewObject(stateClass, constructor,
             JNI_FALSE, JNI_FALSE,   // detected, tracking
@@ -82,7 +82,7 @@ Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
         JNI_LOGE("Failed to get direct buffer address");
         // Return empty state
         jmethodID constructor = env->GetMethodID(stateClass, "<init>",
-            "(ZZFFFFFFFFFFF)V");
+            "(ZZFFFFFFFFFFFFFFFFF)V");
         if (!constructor) return nullptr;
         return env->NewObject(stateClass, constructor,
             JNI_FALSE, JNI_FALSE,
@@ -105,7 +105,7 @@ Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
 
     // Create TargetState object
     jmethodID constructor = env->GetMethodID(stateClass, "<init>",
-        "(ZZFFFFFFFFFFF)V");
+        "(ZZFFFFFFFFFFFFFFFFF)V");
     if (!constructor) return nullptr;
 
     return env->NewObject(stateClass, constructor,
