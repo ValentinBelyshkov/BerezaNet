@@ -302,7 +302,7 @@ TargetState VITTracker::processFrame(
 
                 // Initialize tracker
                 try {
-                    tracker_ = cv::TrackerCSRT::create();
+                    tracker_ = cv::TrackerMIL::create();
                     tracker_->init(stabilized, detected_bbox);
                     tracker_initialized_ = true;
                     tracking_active_ = true;
@@ -446,14 +446,17 @@ bool VITTracker::detectTarget(const cv::Mat& frame, cv::Rect2d& out_bbox, float&
 bool VITTracker::trackTarget(const cv::Mat& frame, cv::Rect2d& out_bbox) {
     if (!tracker_ || !tracker_initialized_) return false;
 
-    bool ok = tracker_->update(frame, out_bbox);
+    cv::Rect bbox_int;  // int-версия для OpenCV API
+    bool ok = tracker_->update(frame, bbox_int);
     if (!ok) return false;
 
-    // Sanity check on bbox
-    if (out_bbox.width < 5 || out_bbox.height < 5) return false;
-    if (out_bbox.x < 0 || out_bbox.y < 0) return false;
-    if (out_bbox.x + out_bbox.width > frame.cols || out_bbox.y + out_bbox.height > frame.rows) return false;
+    // Sanity check on bbox_int
+    if (bbox_int.width < 5 || bbox_int.height < 5) return false;
+    if (bbox_int.x < 0 || bbox_int.y < 0) return false;
+    if (bbox_int.x + bbox_int.width > frame.cols || bbox_int.y + bbox_int.height > frame.rows) return false;
 
+    // Конвертируем обратно в double
+    out_bbox = cv::Rect2d(bbox_int);
     return true;
 }
 

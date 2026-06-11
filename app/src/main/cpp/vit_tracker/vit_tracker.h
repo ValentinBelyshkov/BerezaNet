@@ -6,7 +6,7 @@
 #include <vector>
 #include <deque>
 #include <opencv2/opencv.hpp>
-
+#include <android/log.h>
 #define VIT_LOG_TAG "VIT-Tracker"
 #define VIT_LOGI(...) __android_log_print(ANDROID_LOG_INFO, VIT_LOG_TAG, __VA_ARGS__)
 #define VIT_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, VIT_LOG_TAG, __VA_ARGS__)
