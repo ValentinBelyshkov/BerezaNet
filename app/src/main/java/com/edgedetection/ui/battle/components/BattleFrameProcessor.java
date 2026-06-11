@@ -98,6 +98,21 @@ public class BattleFrameProcessor {
                 yuvMat.release();
             }
 
+            processFrame(rgba, frameTimestampNs, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
+            rgba.release();
+
+        } catch (Exception e) {
+            Log.e(TAG, "processFrame error: " + e.getMessage(), e);
+        } finally {
+            image.close();
+        }
+    }
+
+    public void processFrame(Mat rgba, long frameTimestampNs, float lastGyroX, float lastGyroY, float lastGyroZ, long lastGyroTimestampNs) {
+        try {
+            int width = rgba.width();
+            int height = rgba.height();
+
             // ======== VIT Tracker processing ========
             if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
                 int bufSize = rgba.width() * rgba.height() * 4;
@@ -149,12 +164,8 @@ public class BattleFrameProcessor {
                 if (glView != null) glView.updateFrame(rgba);
             }
 
-            rgba.release();
-
         } catch (Exception e) {
-            Log.e(TAG, "processFrame error: " + e.getMessage(), e);
-        } finally {
-            image.close();
+            Log.e(TAG, "processFrame (Mat) error: " + e.getMessage(), e);
         }
     }
 

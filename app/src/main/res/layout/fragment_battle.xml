@@ -64,12 +64,6 @@ android:layout_height="match_parent">
     android:visibility="gone"
     android:background="#000000">
 
-    <VideoView
-        android:id="@+id/rtsp_video_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center" />
-
     <LinearLayout
         android:id="@+id/rtsp_error_overlay"
         android:layout_width="wrap_content"
