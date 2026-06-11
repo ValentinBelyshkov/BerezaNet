@@ -154,8 +154,8 @@ public class BattleFrameProcessor {
                         rgba.getNativeObjAddr(),
                         edges.getNativeObjAddr(),
                         50, 150, 5,
-                        ts.detected ? Math.round(ts.bboxX + ts.bboxW / 2f) : 0,
-                        ts.detected ? Math.round(ts.bboxY + ts.bboxH / 2f) : 0,
+                        ts.detected ? Math.round(ts.leadX) : 0,
+                        ts.detected ? Math.round(ts.leadY) : 0,
                         ts.detected,
                         false
                 );

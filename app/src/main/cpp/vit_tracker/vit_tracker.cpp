@@ -1,100 +1,240 @@
 #include "vit_tracker.h"
 #include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <sstream>
+#include <numeric>
 
-// ======== Constructor / Destructor ========
-
-VITTracker::VITTracker()
-    : fx_(0), fy_(0), cx_(0), cy_(0), k1_(0), k2_(0)
-{
-    std::fill(imu_to_cam_, imu_to_cam_ + 9, 0.0f);
-    imu_to_cam_[0] = imu_to_cam_[4] = imu_to_cam_[8] = 1.0f; // identity
+VITTracker::VITTracker() {
+    stab_homography_[0] = stab_homography_[4] = stab_homography_[8] = 1.0f;
 }
 
 VITTracker::~VITTracker() {
     release();
 }
 
-// ======== Init ========
-
 bool VITTracker::init(const char* calib_json, float target_w, float target_l) {
     target_width_m_ = target_w;
-    target_length_m_ = target_l;
-
     if (!parseCalibration(calib_json)) {
-        VIT_LOGE("Failed to parse calibration JSON");
-        // Use reasonable defaults for 640x480, ~60° FOV
+        VIT_LOGW("Failed to parse calibration, using defaults");
         fx_ = 640.0f;
         fy_ = 640.0f;
         cx_ = 320.0f;
         cy_ = 240.0f;
-        k1_ = 0.0f;
-        k2_ = 0.0f;
     }
-
-    // Build K and K_inv
-    K_ = (cv::Mat_<double>(3,3) <<
-        fx_, 0, cx_,
-        0, fy_, cy_,
-        0, 0, 1);
-
-    K_inv_ = K_.inv();
-
-    // Build R_imu_to_cam
-    // imu_to_cam_ is stored row-major, OpenCV Mat is row-major
-    VIT_LOGI("Calibration loaded: fx=%.1f fy=%.1f cx=%.1f cy=%.1f",
-             fx_, fy_, cx_, cy_);
-    VIT_LOGI("Target size: %.1f x %.1f m", target_width_m_, target_length_m_);
-
     calib_loaded_ = true;
     return true;
 }
 
-// ======== Release ========
+void VITTracker::reset() {
+    position_history.clear();
+}
 
 void VITTracker::release() {
-    if (tracker_) {
-        tracker_.release();
-    }
-    gyro_buffer_.clear();
-    pos_buffer_.clear();
-    tracking_active_ = false;
-    tracker_initialized_ = false;
-    velocity_initialized_ = false;
-    calib_loaded_ = false;
+    position_history.clear();
 }
 
-// ======== Reset ========
+TargetState VITTracker::processFrame(
+    uint8_t* rgba_data, int w, int h, int64_t frame_ts_ns,
+    float gyro_x, float gyro_y, float gyro_z, int64_t gyro_ts_ns,
+    float t_flight_sec
+) {
+    TargetState state;
+    state.timestamp_ns = frame_ts_ns;
 
-void VITTracker::reset() {
-    if (tracker_) {
-        tracker_.release();
+    if (!rgba_data || w <= 0 || h <= 0) return state;
+
+    cv::Mat frame(h, w, CV_8UC4, rgba_data);
+    cv::Mat gray, blurred, edges;
+
+    // Python: gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    // Note: input is RGBA
+    cv::cvtColor(frame, gray, cv::COLOR_RGBA2GRAY);
+    
+    // Python: blurred = cv2.GaussianBlur(gray, self.blur_kernel, 0)
+    cv::GaussianBlur(gray, blurred, blur_kernel, 0);
+    
+    // Python: edges = cv2.Canny(blurred, self.canny_low, self.canny_high)
+    cv::Canny(blurred, edges, canny_low, canny_high);
+
+    std::vector<TrackedBlob> blobs = detectBlobs(edges);
+
+    if (!blobs.empty()) {
+        const TrackedBlob& best_blob = blobs[0];
+        double timestamp = frame_ts_ns / 1e9;
+        updatePositionHistory(best_blob, timestamp);
+
+        state.detected = true;
+        state.tracking = true;
+        state.bbox_x = best_blob.x - best_blob.size / 2.0f;
+        state.bbox_y = best_blob.y - best_blob.size / 2.0f;
+        state.bbox_w = best_blob.size;
+        state.bbox_h = best_blob.size;
+        state.confidence = best_blob.confidence;
+
+        // Distance estimation
+        if (best_blob.size > 0.1f) {
+            state.distance_m = (target_width_m_ * fx_) / best_blob.size;
+        } else {
+            state.distance_m = 1000.0f;
+        }
+
+        // Predict position
+        // In Android landscape: 
+        // gyro_x is pitch (rotation around X axis)
+        // gyro_y is yaw (rotation around Y axis)
+        // Values are in rad/s
+        cv::Point2f predicted = predictPosition(
+            (double)t_flight_sec,
+            best_blob,
+            gyro_y, // yaw rate
+            gyro_x, // pitch rate
+            w, h
+        );
+
+        state.lead_x_m = predicted.x; // We use lead_x_m to store pixel X for now as requested
+        state.lead_y_m = predicted.y; // and lead_y_m for pixel Y
+        
+        // Angles
+        state.azimuth_deg = (float)(std::atan2(best_blob.x - cx_, fx_) * 180.0 / CV_PI);
+        state.elevation_deg = (float)(std::atan2(best_blob.y - cy_, fy_) * 180.0 / CV_PI);
+
+        // Fill other fields for compatibility
+        state.world_x_m = predicted.x;
+        state.world_y_m = predicted.y;
+        
+        // Velocity (pixel/s)
+        cv::Point2f vel = getBlobVelocity();
+        state.vel_x_mps = vel.x;
+        state.vel_y_mps = vel.y;
     }
-    gyro_buffer_.clear();
-    pos_buffer_.clear();
-    tracking_active_ = false;
-    tracker_initialized_ = false;
-    velocity_initialized_ = false;
-    last_frame_ts_ns_ = 0;
-    lost_counter_ = 0;
-    frames_since_detection_ = 0;
-    vel_x_filtered_ = vel_y_filtered_ = vel_z_filtered_ = 0.0f;
-    last_dR_ = cv::Mat::eye(3, 3, CV_64F);
-    std::fill(stab_homography_, stab_homography_ + 9, 0.0f);
-    stab_homography_[0] = stab_homography_[4] = stab_homography_[8] = 1.0f;
+
+    return state;
 }
 
-// ======== Парсинг JSON ========
+std::vector<TrackedBlob> VITTracker::detectBlobs(const cv::Mat& edges) {
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(edges, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    std::vector<TrackedBlob> blobs;
+    for (const auto& cnt : contours) {
+        double area = cv::contourArea(cnt);
+        if (area < min_blob_size * min_blob_size || area > max_blob_size * max_blob_size) {
+            continue;
+        }
+
+        double perimeter = cv::arcLength(cnt, true);
+        if (perimeter <= 0) continue;
+
+        float circularity = (float)(4.0 * CV_PI * area / (perimeter * perimeter));
+        if (circularity < min_circularity) {
+            continue;
+        }
+
+        cv::Point2f center;
+        float radius;
+        cv::minEnclosingCircle(cnt, center, radius);
+
+        TrackedBlob blob;
+        blob.x = center.x;
+        blob.y = center.y;
+        blob.size = radius * 2.0f;
+        blob.confidence = std::min(1.0f, circularity);
+        blobs.push_back(blob);
+    }
+
+    std::sort(blobs.begin(), blobs.end(), [](const TrackedBlob& a, const TrackedBlob& b) {
+        return a.size > b.size;
+    });
+
+    return blobs;
+}
+
+void VITTracker::updatePositionHistory(const TrackedBlob& blob, double timestamp) {
+    PositionSample sample;
+    sample.time = timestamp;
+    sample.x = blob.x;
+    sample.y = blob.y;
+    position_history.push_back(sample);
+    if (position_history.size() > history_size) {
+        position_history.pop_front();
+    }
+}
+
+cv::Point2f VITTracker::getBlobVelocity() {
+    if (position_history.size() < 5) {
+        return cv::Point2f(0, 0);
+    }
+
+    size_t n = std::min((size_t)10, position_history.size());
+    std::vector<double> ts, xs, ys;
+    double last_t = position_history.back().time;
+
+    for (size_t i = position_history.size() - n; i < position_history.size(); ++i) {
+        ts.push_back(position_history[i].time - last_t);
+        xs.push_back(position_history[i].x);
+        ys.push_back(position_history[i].y);
+    }
+
+    auto linReg = [](const std::vector<double>& t, const std::vector<double>& v) -> float {
+        size_t n = t.size();
+        double sum_t = std::accumulate(t.begin(), t.end(), 0.0);
+        double sum_v = std::accumulate(v.begin(), v.end(), 0.0);
+        double sum_tt = 0, sum_tv = 0;
+        for (size_t i = 0; i < n; ++i) {
+            sum_tt += t[i] * t[i];
+            sum_tv += t[i] * v[i];
+        }
+        double denom = (n * sum_tt - sum_t * sum_t);
+        if (std::abs(denom) < 1e-9) return 0;
+        return (float)((n * sum_tv - sum_t * sum_v) / denom);
+    };
+
+    return cv::Point2f(linReg(ts, xs), linReg(ts, ys));
+}
+
+cv::Point2f VITTracker::predictPosition(
+    double future_time,
+    const TrackedBlob& current_blob,
+    float gyro_yaw_rate,
+    float gyro_pitch_rate,
+    int screen_width,
+    int screen_height
+) {
+    cv::Point2f blob_vel = getBlobVelocity();
+
+    // pixels_per_rad = fx_
+    float cam_vel_x = -gyro_yaw_rate * fx_;
+    float cam_vel_y = gyro_pitch_rate * fy_;
+
+    float obj_vel_x = blob_vel.x - cam_vel_x;
+    float obj_vel_y = blob_vel.y - cam_vel_y;
+
+    float blob_radius = current_blob.size / 2.0f;
+    float max_speed = blob_radius * 5.0f;
+
+    float speed = std::sqrt(obj_vel_x * obj_vel_x + obj_vel_y * obj_vel_y);
+    if (speed > max_speed && max_speed > 0) {
+        float scale = max_speed / speed;
+        obj_vel_x *= scale;
+        obj_vel_y *= scale;
+    }
+
+    float pred_x = current_blob.x + obj_vel_x * (float)future_time;
+    float pred_y = current_blob.y + obj_vel_y * (float)future_time;
+
+    pred_x = std::max(0.0f, std::min((float)screen_width, pred_x));
+    pred_y = std::max(0.0f, std::min((float)screen_height, pred_y));
+
+    return cv::Point2f(pred_x, pred_y);
+}
+
+bool VITTracker::getStabHomography(float out_matrix[9]) const {
+    std::copy(stab_homography_, stab_homography_ + 9, out_matrix);
+    return true;
+}
 
 bool VITTracker::parseCalibration(const char* json) {
     if (!json || strlen(json) == 0) return false;
-
-    // Minimal JSON parser for the calib.json structure
-    // Expected format: {"fx":640,"fy":640,"cx":320,"cy":240,"k1":0,"k2":0,"imu_to_cam":[[1,0,0],[0,1,0],[0,0,1]]}
     std::string s(json);
-
     auto findNum = [&s](const std::string& key, float& val) -> bool {
         auto pos = s.find("\"" + key + "\"");
         if (pos == std::string::npos) return false;
@@ -105,9 +245,7 @@ bool VITTracker::parseCalibration(const char* json) {
         std::string num;
         bool neg = false;
         if (pos < s.size() && s[pos] == '-') { neg = true; pos++; }
-        bool hasDot = false;
         while (pos < s.size() && (isdigit(s[pos]) || s[pos] == '.')) {
-            if (s[pos] == '.') hasDot = true;
             num += s[pos];
             pos++;
         }
@@ -117,433 +255,10 @@ bool VITTracker::parseCalibration(const char* json) {
         return true;
     };
 
-    findNum("fx", fx_);
-    findNum("fy", fy_);
-    findNum("cx", cx_);
-    findNum("cy", cy_);
-    findNum("k1", k1_);
-    findNum("k2", k2_);
-
-    // Parse imu_to_cam matrix
-    auto matPos = s.find("\"imu_to_cam\"");
-    if (matPos != std::string::npos) {
-        auto bracketPos = s.find('[', matPos);
-        if (bracketPos != std::string::npos) {
-            int count = 0;
-            int row = 0, col = 0;
-            auto p = bracketPos;
-            while (p < s.size() && row < 3) {
-                if (s[p] == '[') count++;
-                else if (s[p] == ']') count--;
-                else if (s[p] == '-' || isdigit(s[p]) || s[p] == '.') {
-                    auto start = p;
-                    bool neg = (s[p] == '-');
-                    if (neg) p++;
-                    while (p < s.size() && (isdigit(s[p]) || s[p] == '.')) p++;
-                    if (p > start) {
-                        float val = std::stof(s.substr(start, p - start));
-                        if (row < 3 && col < 3) {
-                            imu_to_cam_[row * 3 + col] = val;
-                            col++;
-                        }
-                    }
-                    continue;
-                }
-                p++;
-                if (count == 2 && col == 3) {
-                    row++;
-                    col = 0;
-                }
-            }
-        }
-    }
-
-    VIT_LOGI("Parsed calib: fx=%.2f fy=%.2f cx=%.2f cy=%.2f k1=%.6f k2=%.6f",
-             fx_, fy_, cx_, cy_, k1_, k2_);
-    VIT_LOGI("imu_to_cam R0: [%.4f %.4f %.4f]", imu_to_cam_[0], imu_to_cam_[1], imu_to_cam_[2]);
-    VIT_LOGI("imu_to_cam R1: [%.4f %.4f %.4f]", imu_to_cam_[3], imu_to_cam_[4], imu_to_cam_[5]);
-    VIT_LOGI("imu_to_cam R2: [%.4f %.4f %.4f]", imu_to_cam_[6], imu_to_cam_[7], imu_to_cam_[8]);
-
-    return (fx_ > 0 && fy_ > 0);
-}
-
-// ======== Основной processFrame ========
-
-TargetState VITTracker::processFrame(
-    uint8_t* rgba_data, int w, int h, int64_t frame_ts_ns,
-    float gyro_x, float gyro_y, float gyro_z, int64_t gyro_ts_ns,
-    float t_flight_sec)
-{
-    TargetState state;
-    state.timestamp_ns = frame_ts_ns;
-
-    if (!calib_loaded_ || !rgba_data || w <= 0 || h <= 0) {
-        return state;
-    }
-
-    // 1. Push gyro sample into buffer
-    gyro_buffer_.push(gyro_ts_ns, gyro_x, gyro_y, gyro_z);
-
-    // 2. Create OpenCV Mat from RGBA data (no copy - wraps the buffer)
-    cv::Mat frame(h, w, CV_8UC4, rgba_data);
-
-    // 3. Sync gyro - find or interpolate gyro for this frame timestamp
-    float gx = 0, gy = 0, gz = 0;
-    bool gyro_ok = syncGyro(frame_ts_ns, gx, gy, gz);
-    if (!gyro_ok) {
-        // No gyro data available, process without stabilization
-        VIT_LOGW("No gyro data for frame ts=%lld", (long long)frame_ts_ns);
-    } else {
-        // Transform gyro to camera coordinate system using imu_to_cam rotation
-        float gx_cam = imu_to_cam_[0] * gx + imu_to_cam_[1] * gy + imu_to_cam_[2] * gz;
-        float gy_cam = imu_to_cam_[3] * gx + imu_to_cam_[4] * gy + imu_to_cam_[5] * gz;
-        float gz_cam = imu_to_cam_[6] * gx + imu_to_cam_[7] * gy + imu_to_cam_[8] * gz;
-
-        // 4. Compute dt since last frame
-        float dt_sec = 0.0f;
-        if (last_frame_ts_ns_ > 0) {
-            dt_sec = (float)((double)(frame_ts_ns - last_frame_ts_ns_) / 1.0e9);
-            if (dt_sec > 0.1f) dt_sec = 0.033f; // cap at ~30fps
-        } else {
-            dt_sec = 0.033f; // default 30fps
-        }
-
-        // 5. Compute differential rotation dR = exp(ω × dt)
-        cv::Mat dR = computeDifferentialRotation(gx_cam, gy_cam, gz_cam, dt_sec);
-
-        // 6. Stabilize frame using homography H = K * dR * K_inv
-        cv::Mat stabilized;
-        stabilizeFrame(frame, stabilized, dR);
-
-        // Store dR for next frame
-        last_dR_ = dR.clone();
-        last_frame_ts_ns_ = frame_ts_ns;
-
-        // 7. Update stab_homography_ for OpenGL
-        cv::Mat H = K_ * dR * K_inv_;
-        // Store H_inv for OpenGL (we need to transform UVs)
-        cv::Mat H_inv = H.inv(cv::DECOMP_LU);
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                stab_homography_[i * 3 + j] = (float)H_inv.at<double>(i, j);
-            }
-        }
-
-        // 8. Detection/Tracking on stabilized frame
-        cv::Rect2d bbox;
-        float confidence = 0.0f;
-
-        if (tracking_active_ && tracker_initialized_) {
-            bool track_ok = trackTarget(stabilized, bbox);
-            if (track_ok) {
-                lost_counter_ = 0;
-                frames_since_detection_++;
-                bbox_ = bbox;
-                state.detected = true;
-                state.tracking = true;
-                state.confidence = std::min(1.0f, 0.5f + frames_since_detection_ * 0.05f);
-
-                // 9. Triangulation
-                float wx, wy, wz;
-                compute3DPosition(bbox, wx, wy, wz);
-                state.bbox_x = (float)bbox.x;
-                state.bbox_y = (float)bbox.y;
-                state.bbox_w = (float)bbox.width;
-                state.bbox_h = (float)bbox.height;
-                state.world_x_m = wx;
-                state.world_y_m = wy;
-                state.world_z_m = wz;
-
-                // Distance
-                if (bbox.width > 0) {
-                    state.distance_m = (target_width_m_ * fx_) / (float)bbox.width;
-                }
-
-                // 10. Update velocity
-                updateVelocity(wx, wy, wz, frame_ts_ns);
-                state.vel_x_mps = vel_x_filtered_;
-                state.vel_y_mps = vel_y_filtered_;
-                state.vel_z_mps = vel_z_filtered_;
-
-                // 11. Lead point
-                computeLeadPoint(wx, wy, wz, t_flight_sec,
-                                 state.lead_x_m, state.lead_y_m, state.lead_z_m);
-
-                // 12. Angles
-                computeAngles(wx, wy, wz,
-                              state.azimuth_deg, state.elevation_deg);
-            } else {
-                lost_counter_++;
-                frames_since_detection_ = 0;
-                if (lost_counter_ > 5) {
-                    tracking_active_ = false;
-                    tracker_initialized_ = false;
-                    if (tracker_) {
-                        tracker_.release();
-                    }
-                    VIT_LOGI("Tracker lost target, switching to detection mode");
-                }
-                state.confidence = std::max(0.0f, 1.0f - lost_counter_ * 0.2f);
-            }
-        } else {
-            // Detection mode
-            cv::Rect2d detected_bbox;
-            float conf = 0.0f;
-            if (detectTarget(stabilized, detected_bbox, conf)) {
-                lost_counter_ = 0;
-                bbox_ = detected_bbox;
-                state.detected = true;
-                state.tracking = false;
-                state.confidence = conf;
-                state.bbox_x = (float)detected_bbox.x;
-                state.bbox_y = (float)detected_bbox.y;
-                state.bbox_w = (float)detected_bbox.width;
-                state.bbox_h = (float)detected_bbox.height;
-
-                // Initialize tracker
-                try {
-                    tracker_ = cv::TrackerCSRT::create();
-                    tracker_->init(stabilized, detected_bbox);
-                    tracker_initialized_ = true;
-                    tracking_active_ = true;
-                    frames_since_detection_ = 0;
-                    VIT_LOGI("Tracker initialized at [%.0f, %.0f, %.0f, %.0f]",
-                             detected_bbox.x, detected_bbox.y,
-                             detected_bbox.width, detected_bbox.height);
-                } catch (cv::Exception& e) {
-                    VIT_LOGE("Tracker init failed: %s", e.what());
-                }
-            }
-        }
-    }
-
-    return state;
-}
-
-// ======== Gyro sync ========
-
-bool VITTracker::syncGyro(int64_t frame_ts_ns, float& wx, float& wy, float& wz) {
-    // Max 5ms jitter = 5,000,000 ns
-    const int64_t MAX_DELTA_NS = 5 * 1000 * 1000; // 5ms
-    return gyro_buffer_.getInterpolated(frame_ts_ns, MAX_DELTA_NS, wx, wy, wz);
-}
-
-// ======== Differential rotation using Rodrigues ========
-
-cv::Mat VITTracker::computeDifferentialRotation(float wx, float wy, float wz, float dt_sec) {
-    // ω = (wx, wy, wz) in rad/s
-    // θ = |ω| * dt
-    // r = ω / |ω| * θ  (rotation vector)
-    float theta = std::sqrt(wx*wx + wy*wy + wz*wz) * dt_sec;
-
-    if (theta < 1e-10f) {
-        return cv::Mat::eye(3, 3, CV_64F);
-    }
-
-    // Normalize and scale
-    float rx = wx * dt_sec;
-    float ry = wy * dt_sec;
-    float rz = wz * dt_sec;
-
-    // Rodrigues: convert rotation vector to 3x3 rotation matrix
-    cv::Mat rvec = (cv::Mat_<double>(3,1) << rx, ry, rz);
-    cv::Mat R;
-    cv::Rodrigues(rvec, R);
-
-    return R;
-}
-
-// ======== Stabilize frame ========
-
-void VITTracker::stabilizeFrame(const cv::Mat& src, cv::Mat& dst, const cv::Mat& dR) {
-    // H = K * dR * K_inv
-    cv::Mat H = K_ * dR * K_inv_;
-
-    // Apply warpPerspective for stabilization
-    cv::warpPerspective(src, dst, H, src.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-}
-
-// ======== Get homography for OpenGL ========
-
-bool VITTracker::getStabHomography(float out_matrix[9]) const {
-    std::copy(stab_homography_, stab_homography_ + 9, out_matrix);
-    return calib_loaded_;
-}
-
-// ======== Blob detection ========
-
-bool VITTracker::detectTarget(const cv::Mat& frame, cv::Rect2d& out_bbox, float& confidence) {
-    // Convert RGBA to grayscale
-    cv::Mat gray;
-    if (frame.channels() == 4) {
-        cv::cvtColor(frame, gray, cv::COLOR_RGBA2GRAY);
-    } else if (frame.channels() == 3) {
-        cv::cvtColor(frame, gray, cv::COLOR_RGB2GRAY);
-    } else {
-        gray = frame.clone();
-    }
-
-    // Adaptive threshold to find dark objects against sky background
-    cv::Mat binary;
-    cv::threshold(gray, binary, 80, 255, cv::THRESH_BINARY_INV);
-
-    // Morphological cleanup
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-    cv::morphologyEx(binary, binary, cv::MORPH_OPEN, kernel);
-    cv::morphologyEx(binary, binary, cv::MORPH_CLOSE, kernel);
-
-    // Find contours
-    std::vector<std::vector<cv::Point>> contours;
-    std::vector<cv::Vec4i> hierarchy;
-    cv::findContours(binary, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-    if (contours.empty()) {
-        return false;
-    }
-
-    // Find best contour
-    float best_score = 0.0f;
-    cv::Rect best_rect;
-    double best_area = 0;
-
-    for (auto& contour : contours) {
-        double area = cv::contourArea(contour);
-        // Area range for drone at 640x480: ~100-400 px
-        if (area < 60.0 || area > 2000.0) continue;
-
-        cv::Rect rect = cv::boundingRect(contour);
-        float aspect = (float)rect.width / (float)rect.height;
-        if (aspect < 0.3f || aspect > 4.0f) continue;
-
-        // Score based on area (prefer mid-range objects)
-        float area_score = 1.0f - std::abs(area - 200.0f) / 500.0f;
-        area_score = std::max(0.0f, std::min(1.0f, area_score));
-
-        // Prefer aspect ratio near 2:1 (drone shape)
-        float aspect_score = 1.0f - std::abs(aspect - 1.5f) / 2.0f;
-        aspect_score = std::max(0.0f, std::min(1.0f, aspect_score));
-
-        float score = area_score * 0.6f + aspect_score * 0.4f;
-
-        if (score > best_score) {
-            best_score = score;
-            best_rect = rect;
-            best_area = area;
-        }
-    }
-
-    if (best_score < 0.3f) {
-        return false;
-    }
-
-    out_bbox = best_rect;
-    confidence = best_score;
-    return true;
-}
-
-// ======== Track target ========
-
-bool VITTracker::trackTarget(const cv::Mat& frame, cv::Rect2d& out_bbox) {
-    if (!tracker_ || !tracker_initialized_) return false;
-
-    bool ok = tracker_->update(frame, out_bbox);
-    if (!ok) return false;
-
-    // Sanity check on bbox
-    if (out_bbox.width < 5 || out_bbox.height < 5) return false;
-    if (out_bbox.x < 0 || out_bbox.y < 0) return false;
-    if (out_bbox.x + out_bbox.width > frame.cols || out_bbox.y + out_bbox.height > frame.rows) return false;
-
-    return true;
-}
-
-// ======== Triangulation ========
-
-void VITTracker::compute3DPosition(const cv::Rect2d& bbox, float& x, float& y, float& z) {
-    float u = (float)(bbox.x + bbox.width / 2.0);
-    float v = (float)(bbox.y + bbox.height / 2.0);
-
-    // Distance from width
-    if (bbox.width > 1.0f) {
-        z = (target_width_m_ * fx_) / (float)bbox.width;
-    } else {
-        z = 1000.0f; // fallback
-    }
-
-    // 3D position in camera coordinates
-    x = (u - cx_) * z / fx_;
-    y = (v - cy_) * z / fy_;
-}
-
-// ======== Velocity estimation ========
-
-void VITTracker::updateVelocity(float x, float y, float z, int64_t ts_ns) {
-    TimedPosition tp;
-    tp.timestamp_ns = ts_ns;
-    tp.x = x;
-    tp.y = y;
-    tp.z = z;
-
-    pos_buffer_.push_back(tp);
-    if (pos_buffer_.size() > MAX_POS_SAMPLES) {
-        pos_buffer_.pop_front();
-    }
-
-    if (pos_buffer_.size() < 2) {
-        return;
-    }
-
-    // Compute velocity from last two samples
-    const auto& prev = pos_buffer_[pos_buffer_.size() - 2];
-    const auto& curr = pos_buffer_.back();
-
-    double dt_sec = (double)(curr.timestamp_ns - prev.timestamp_ns) / 1.0e9;
-    if (dt_sec < 0.001) return; // too small
-
-    float vx = (curr.x - prev.x) / (float)dt_sec;
-    float vy = (curr.y - prev.y) / (float)dt_sec;
-    float vz = (curr.z - prev.z) / (float)dt_sec;
-
-    // Sanity check: reject velocities > 100 m/s
-    float speed = std::sqrt(vx*vx + vy*vy + vz*vz);
-    if (speed > 100.0f) {
-        VIT_LOGW("Velocity outlier: %.1f m/s, rejecting", speed);
-        return;
-    }
-
-    // EMA filter α=0.3
-    const float alpha = 0.3f;
-    if (!velocity_initialized_) {
-        vel_x_filtered_ = vx;
-        vel_y_filtered_ = vy;
-        vel_z_filtered_ = vz;
-        velocity_initialized_ = true;
-    } else {
-        vel_x_filtered_ = vel_x_filtered_ * (1.0f - alpha) + vx * alpha;
-        vel_y_filtered_ = vel_y_filtered_ * (1.0f - alpha) + vy * alpha;
-        vel_z_filtered_ = vel_z_filtered_ * (1.0f - alpha) + vz * alpha;
-    }
-}
-
-// ======== Lead point ========
-
-void VITTracker::computeLeadPoint(float x, float y, float z, float t_flight,
-                                   float& lx, float& ly, float& lz) {
-    if (t_flight <= 0) t_flight = 2.0f;
-    lx = x + vel_x_filtered_ * t_flight;
-    ly = y + vel_y_filtered_ * t_flight;
-    lz = z + vel_z_filtered_ * t_flight;
-}
-
-// ======== Angles ========
-
-void VITTracker::computeAngles(float x, float y, float z,
-                                float& azimuth_deg, float& elevation_deg) {
-    if (z > 0.001f) {
-        azimuth_deg = (float)(std::atan2((double)x, (double)z) * 180.0 / CV_PI);
-        elevation_deg = (float)(std::atan2((double)y, (double)z) * 180.0 / CV_PI);
-    } else {
-        azimuth_deg = 0.0f;
-        elevation_deg = 0.0f;
-    }
+    bool ok = true;
+    ok &= findNum("fx", fx_);
+    ok &= findNum("fy", fy_);
+    ok &= findNum("cx", cx_);
+    ok &= findNum("cy", cy_);
+    return ok;
 }
