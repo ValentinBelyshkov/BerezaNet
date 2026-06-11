@@ -150,14 +150,29 @@ public class BattleFrameProcessor {
 
             if (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) {
                 VITTracker.TargetState ts = lastTargetState;
+                int lower = viewModel.getLowerThreshold().getValue() != null ? viewModel.getLowerThreshold().getValue() : 50;
+                int upper = viewModel.getUpperThreshold().getValue() != null ? viewModel.getUpperThreshold().getValue() : 150;
+                int blur = viewModel.getBlurValue().getValue() != null ? viewModel.getBlurValue().getValue() : 5;
+
+                float leadX = ts.detected ? ts.leadX : 0;
+                float leadY = ts.detected ? ts.leadY : 0;
+                
+                boolean aligned = false;
+                if (ts.detected) {
+                    float dx = leadX - width / 2f;
+                    float dy = leadY - height / 2f;
+                    float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 40f) aligned = true;
+                }
+
                 EdgeDetector.detectEdgesWithReticle(
                         rgba.getNativeObjAddr(),
                         edges.getNativeObjAddr(),
-                        50, 150, 5,
-                        ts.detected ? Math.round(ts.leadX) : 0,
-                        ts.detected ? Math.round(ts.leadY) : 0,
+                        lower, upper, blur,
+                        Math.round(leadX),
+                        Math.round(leadY),
                         ts.detected,
-                        false
+                        aligned
                 );
                 if (glView != null) glView.updateFrame(edges);
             } else {

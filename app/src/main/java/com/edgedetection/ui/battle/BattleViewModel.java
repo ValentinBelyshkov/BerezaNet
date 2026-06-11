@@ -35,10 +35,14 @@ public class BattleViewModel extends AndroidViewModel {
     }
 
     public void initMats(int width, int height) {
-        if (edges == null) {
-            edges = new Mat(height, width, CvType.CV_8UC4);
-            Log.i(TAG, "Edges Mat created: " + width + "x" + height);
+        if (edges != null) {
+            if (edges.width() == width && edges.height() == height) {
+                return;
+            }
+            edges.release();
         }
+        edges = new Mat(height, width, CvType.CV_8UC4);
+        Log.i(TAG, "Edges Mat created: " + width + "x" + height);
     }
 
     public Mat getEdges() {
