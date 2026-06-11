@@ -16,10 +16,15 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
+import android.media.MediaPlayer;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -87,6 +92,19 @@ public class BattleFragment extends Fragment {
     private Button calibrateButton;
     private Button toggleEdgesButton;
     private TextView gpsWarning;
+
+    // RTSP Views
+    private FrameLayout rtspContainer;
+    private VideoView rtspVideoView;
+    private View rtspErrorOverlay;
+    private ProgressBar rtspProgressBar;
+    private TextView rtspErrorText;
+    private TextView rtspRetryText;
+
+    // RTSP State Tracking
+    private final Handler rtspHandler = new Handler(Looper.getMainLooper());
+    private boolean isRtspActive = false;
+    private boolean isVideoRendering = false;
 
     // --- Simulation state ---
     private volatile double droneLat, droneLon, droneAlt;
@@ -188,6 +206,13 @@ public class BattleFragment extends Fragment {
         calibrateButton = view.findViewById(R.id.calibrate_button);
         toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
 
+        rtspContainer = view.findViewById(R.id.rtsp_container);
+        rtspVideoView = view.findViewById(R.id.rtsp_video_view);
+        rtspErrorOverlay = view.findViewById(R.id.rtsp_error_overlay);
+        rtspProgressBar = view.findViewById(R.id.rtsp_progress_bar);
+        rtspErrorText = view.findViewById(R.id.rtsp_error_text);
+        rtspRetryText = view.findViewById(R.id.rtsp_retry_text);
+
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
             ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
         });
@@ -272,6 +297,169 @@ public class BattleFragment extends Fragment {
         });
     }
 
+    private final Runnable rtspRetryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isRtspActive) return;
+            checkConnectionAndStartStream();
+        }
+    };
+
+    private final Runnable rtspTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isRtspActive) return;
+            if (!isVideoRendering) {
+                showRtspError("Нет изображения по rtsp://192.168.42.1:8554/video");
+                scheduleRtspRetry();
+            }
+        }
+    };
+
+    private void startRtspStreaming() {
+        isRtspActive = true;
+        checkConnectionAndStartStream();
+    }
+
+    private void stopRtspStreaming() {
+        isRtspActive = false;
+        isVideoRendering = false;
+        rtspHandler.removeCallbacks(rtspRetryRunnable);
+        rtspHandler.removeCallbacks(rtspTimeoutRunnable);
+        stopRtspPlayback();
+    }
+
+    private void stopRtspPlayback() {
+        try {
+            if (rtspVideoView != null) {
+                rtspVideoView.stopPlayback();
+                rtspVideoView.setOnPreparedListener(null);
+                rtspVideoView.setOnErrorListener(null);
+                rtspVideoView.setOnInfoListener(null);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error stopping RTSP playback", e);
+        }
+    }
+
+    private void checkConnectionAndStartStream() {
+        if (rtspProgressBar != null) rtspProgressBar.setVisibility(View.VISIBLE);
+        if (rtspErrorText != null) rtspErrorText.setText("Проверка связи (192.168.42.1)...");
+        if (rtspRetryText != null) rtspRetryText.setVisibility(View.GONE);
+        if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.VISIBLE);
+
+        stopRtspPlayback();
+
+        if (cameraExecutor == null) return;
+
+        cameraExecutor.execute(() -> {
+            boolean pingOk = pingHost("192.168.42.1", 1500);
+            rtspHandler.post(() -> {
+                if (!isRtspActive) return;
+                if (!pingOk) {
+                    showRtspError("Нет пинга до 192.168.42.1");
+                    scheduleRtspRetry();
+                } else {
+                    startRtspPlayback();
+                }
+            });
+        });
+    }
+
+    private void startRtspPlayback() {
+        isVideoRendering = false;
+        if (rtspProgressBar != null) rtspProgressBar.setVisibility(View.VISIBLE);
+        if (rtspErrorText != null) rtspErrorText.setText("Загрузка RTSP потока...");
+        if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.VISIBLE);
+
+        rtspHandler.removeCallbacks(rtspTimeoutRunnable);
+        rtspHandler.postDelayed(rtspTimeoutRunnable, 3000); // 3-second timeout
+
+        try {
+            rtspVideoView.setVideoURI(android.net.Uri.parse("rtsp://192.168.42.1:8554/video"));
+            
+            rtspVideoView.setOnPreparedListener(mp -> {
+                if (!isRtspActive) return;
+                rtspVideoView.start();
+            });
+
+            rtspVideoView.setOnErrorListener((mp, what, extra) -> {
+                if (!isRtspActive) return true;
+                rtspHandler.removeCallbacks(rtspTimeoutRunnable);
+                showRtspError("Нет изображения по rtsp://192.168.42.1:8554/video");
+                scheduleRtspRetry();
+                return true;
+            });
+
+            rtspVideoView.setOnInfoListener((mp, what, extra) -> {
+                if (!isRtspActive) return false;
+                if (what == android.media.MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                    isVideoRendering = true;
+                    rtspHandler.removeCallbacks(rtspTimeoutRunnable);
+                    if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.GONE);
+                }
+                return false;
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting up RTSP VideoView", e);
+            showRtspError("Нет изображения по rtsp://192.168.42.1:8554/video");
+            scheduleRtspRetry();
+        }
+    }
+
+    private void showRtspError(String message) {
+        if (rtspProgressBar != null) rtspProgressBar.setVisibility(View.GONE);
+        if (rtspErrorText != null) rtspErrorText.setText(message);
+        if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.VISIBLE);
+    }
+
+    private void scheduleRtspRetry() {
+        if (rtspRetryText != null) rtspRetryText.setVisibility(View.VISIBLE);
+        rtspHandler.removeCallbacks(rtspRetryRunnable);
+        rtspHandler.postDelayed(rtspRetryRunnable, 3000); // Retry every 3 seconds
+    }
+
+    private boolean pingHost(String host, int timeoutMs) {
+        try {
+            Process process = Runtime.getRuntime().exec("/system/bin/ping -c 1 -W 2 " + host);
+            int exitValue = process.waitFor();
+            if (exitValue == 0) return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Shell ping command failed, trying fallback reachable check", e);
+        }
+        try {
+            java.net.InetAddress address = java.net.InetAddress.getByName(host);
+            return address.isReachable(timeoutMs);
+        } catch (Exception e) {
+            Log.e(TAG, "InetAddress check failed for " + host, e);
+            return false;
+        }
+    }
+
+    private void showRtspStreamingUI() {
+        if (rtspContainer != null) rtspContainer.setVisibility(View.VISIBLE);
+        if (glView != null) glView.setVisibility(View.GONE);
+        View ar = getView() != null ? getView().findViewById(R.id.ar_overlay) : null;
+        if (ar != null) ar.setVisibility(View.GONE);
+        if (bulletOverlay != null) bulletOverlay.setVisibility(View.GONE);
+        if (calibrateButton != null) calibrateButton.setVisibility(View.GONE);
+        if (toggleEdgesButton != null) toggleEdgesButton.setVisibility(View.GONE);
+
+        startRtspStreaming();
+    }
+
+    private void hideRtspStreamingUI() {
+        stopRtspStreaming();
+
+        if (rtspContainer != null) rtspContainer.setVisibility(View.GONE);
+        if (glView != null) glView.setVisibility(View.VISIBLE);
+        View ar = getView() != null ? getView().findViewById(R.id.ar_overlay) : null;
+        if (ar != null) ar.setVisibility(View.VISIBLE);
+        if (bulletOverlay != null) bulletOverlay.setVisibility(View.VISIBLE);
+        if (calibrateButton != null) calibrateButton.setVisibility(View.VISIBLE);
+        if (toggleEdgesButton != null) toggleEdgesButton.setVisibility(View.VISIBLE);
+    }
+
     private void checkPermissions() {
         List<String> need = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
@@ -319,13 +507,23 @@ public class BattleFragment extends Fragment {
 
             cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
                 if (source != null) {
-                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                    if (source instanceof ExternalCameraSource) {
+                        showRtspStreamingUI();
+                    } else {
+                        hideRtspStreamingUI();
+                        source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                    }
                 }
             });
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                if (current instanceof ExternalCameraSource) {
+                    showRtspStreamingUI();
+                } else {
+                    hideRtspStreamingUI();
+                    current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                }
             }
         }
     }
@@ -481,7 +679,19 @@ public class BattleFragment extends Fragment {
         calibrationHandler.removeCallbacks(calibrationRunnable);
         calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
         if (frameProcessor != null) frameProcessor.resetTracker();
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+        
+        if (cameraManager != null) {
+            CameraSource current = cameraManager.getCurrentSource().getValue();
+            if (current instanceof ExternalCameraSource) {
+                showRtspStreamingUI();
+            } else {
+                hideRtspStreamingUI();
+                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+        }
+
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locationManager.startLocationUpdates();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
@@ -490,6 +700,7 @@ public class BattleFragment extends Fragment {
     public void onPause() {
         super.onPause();
         lastFrameNanos = 0;
+        stopRtspStreaming();
         if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) cameraManager.getCurrentSource().getValue().stop();
         if (glView != null) glView.onPause();
         if (sceneRenderer != null) sceneRenderer.onPause();
@@ -505,6 +716,15 @@ public class BattleFragment extends Fragment {
         super.onDestroyView();
         ballisticsManager.clear();
         if (choreographer != null) choreographer.removeFrameCallback(frameCallback);
+        stopRtspStreaming();
+        rtspContainer = null;
+        rtspVideoView = null;
+        rtspErrorOverlay = null;
+        rtspProgressBar = null;
+        rtspErrorText = null;
+        rtspRetryText = null;
+        rtspHandler.removeCallbacksAndMessages(null);
+
         if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) {
             cameraManager.getCurrentSource().getValue().stop();
             cameraManager = null;

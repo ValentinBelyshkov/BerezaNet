@@ -56,6 +56,58 @@ android:layout_height="match_parent">
     android:visibility="gone"
     android:contentDescription="Точка упреждения" />
 
+<!-- RTSP Custom Streaming UI Container -->
+<FrameLayout
+    android:id="@+id/rtsp_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone"
+    android:background="#000000">
+
+    <VideoView
+        android:id="@+id/rtsp_video_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/rtsp_error_overlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:background="#AA000000"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/rtsp_progress_bar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/rtsp_error_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF4444"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:text="Подключение... " />
+
+        <TextView
+            android:id="@+id/rtsp_retry_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:text="Повторная попытка через 3 сек..."
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>
+
 <!-- Кнопка калибровки -->
 <android.widget.Button
     android:id="@+id/calibrate_button"
