@@ -6,7 +6,7 @@
 #include <vector>
 #include <deque>
 #include <opencv2/opencv.hpp>
-
+#include <android/log.h>
 #define VIT_LOG_TAG "VIT-Tracker"
 #define VIT_LOGI(...) __android_log_print(ANDROID_LOG_INFO, VIT_LOG_TAG, __VA_ARGS__)
 #define VIT_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, VIT_LOG_TAG, __VA_ARGS__)
@@ -172,7 +172,8 @@ public:
     TargetState processFrame(
         uint8_t* rgba_data, int w, int h, int64_t frame_ts_ns,
         float gyro_x, float gyro_y, float gyro_z, int64_t gyro_ts_ns,
-        float t_flight_sec
+        float t_flight_sec,
+        float pitch = 0, float yaw = 0, float roll = 0
     );
     void reset();
     void release();
@@ -180,7 +181,15 @@ public:
     // Для OpenGL шейдера: получить матрицу стабилизации H⁻¹
     bool getStabHomography(float out_matrix[9]) const;
 
+    void drawOverlay(cv::Mat& frame, const TargetState& state, 
+                     float pitch, float yaw, float roll,
+                     float gx, float gy, float gz);
+
 private:
+    struct Blob {
+        float x, y, size;
+    };
+    std::vector<Blob> last_blobs_;
     // Калибровка
     float fx_, fy_, cx_, cy_;
     float k1_, k2_;
@@ -217,9 +226,10 @@ private:
     // Матрица стабилизации для OpenGL
     float stab_homography_[9] = {1,0,0, 0,1,0, 0,0,1};
 
-    // K and K_inv
+    // K, K_inv and distortion coefficients
     cv::Mat K_;
     cv::Mat K_inv_;
+    cv::Mat dist_coeffs_;
 
     // Парсинг calib.json
     bool parseCalibration(const char* json);

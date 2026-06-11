@@ -43,15 +43,16 @@ Java_com_edgedetection_jni_VITTracker_nativeInit(
 JNIEXPORT jobject JNICALL
 Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
     JNIEnv* env, jobject thiz,
-    jobject rgba_buffer,
-    jint width,
-    jint height,
+    jlong mat_addr,
     jlong frame_timestamp_ns,
     jfloat gyro_x,
     jfloat gyro_y,
     jfloat gyro_z,
     jlong gyro_timestamp_ns,
-    jfloat t_flight_sec)
+    jfloat t_flight_sec,
+    jfloat pitch,
+    jfloat yaw,
+    jfloat roll)
 {
     // Default return: empty TargetState
     jclass stateClass = env->FindClass("com/edgedetection/jni/VITTracker$TargetState");
@@ -59,6 +60,11 @@ Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
         JNI_LOGE("TargetState class not found");
         return nullptr;
     }
+
+    cv::Mat& rgba_mat = *(cv::Mat*)mat_addr;
+    uint8_t* rgba_data = rgba_mat.data;
+    int width = rgba_mat.cols;
+    int height = rgba_mat.rows;
 
     if (!g_tracker) {
         // Return empty state
@@ -76,31 +82,13 @@ Java_com_edgedetection_jni_VITTracker_nativeProcessFrame(
             0.0f);                   // confidence
     }
 
-    // Get RGBA data from ByteBuffer
-    uint8_t* rgba_data = (uint8_t*)env->GetDirectBufferAddress(rgba_buffer);
-    if (!rgba_data) {
-        JNI_LOGE("Failed to get direct buffer address");
-        // Return empty state
-        jmethodID constructor = env->GetMethodID(stateClass, "<init>",
-            "(ZZFFFFFFFFFFF)V");
-        if (!constructor) return nullptr;
-        return env->NewObject(stateClass, constructor,
-            JNI_FALSE, JNI_FALSE,
-            0.0f, 0.0f, 0.0f, 0.0f,
-            0.0f,
-            0.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.0f,
-            0.0f, 0.0f,
-            0.0f);
-    }
-
     TargetState ts = g_tracker->processFrame(
-        rgba_data, (int)width, (int)height,
+        rgba_data, width, height,
         (int64_t)frame_timestamp_ns,
         (float)gyro_x, (float)gyro_y, (float)gyro_z,
         (int64_t)gyro_timestamp_ns,
-        (float)t_flight_sec
+        (float)t_flight_sec,
+        (float)pitch, (float)yaw, (float)roll
     );
 
     // Create TargetState object
@@ -157,6 +145,32 @@ Java_com_edgedetection_jni_VITTracker_nativeRelease(
         g_tracker = nullptr;
         JNI_LOGI("Tracker released");
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_edgedetection_jni_VITTracker_nativeDrawOverlay(
+    JNIEnv* env, jobject thiz,
+    jlong mat_addr,
+    jboolean detected,
+    jboolean tracking,
+    jfloat bbox_x, jfloat bbox_y, jfloat bbox_w, jfloat bbox_h,
+    jfloat confidence,
+    jfloat pitch, jfloat yaw, jfloat roll,
+    jfloat gx, jfloat gy, jfloat gz)
+{
+    if (!g_tracker) return;
+
+    cv::Mat& mat = *(cv::Mat*)mat_addr;
+    TargetState ts;
+    ts.detected = (bool)detected;
+    ts.tracking = (bool)tracking;
+    ts.bbox_x = bbox_x;
+    ts.bbox_y = bbox_y;
+    ts.bbox_w = bbox_w;
+    ts.bbox_h = bbox_h;
+    ts.confidence = confidence;
+
+    g_tracker->drawOverlay(mat, ts, pitch, yaw, roll, gx, gy, gz);
 }
 
 } // extern "C"

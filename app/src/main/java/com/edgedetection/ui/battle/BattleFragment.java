@@ -80,6 +80,7 @@ public class BattleFragment extends Fragment {
     
     private volatile float lastGyroX = 0f, lastGyroY = 0f, lastGyroZ = 0f;
     private volatile long lastGyroTimestampNs = 0;
+    private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
     private long lastLogTime = 0;
 
     // --- Views ---
@@ -150,6 +151,9 @@ public class BattleFragment extends Fragment {
         sensorProvider = new BattleSensorProvider(requireContext(), imuHandler, new BattleSensorProvider.OnSensorChangedListener() {
             @Override
             public void onRotationMatrixUpdated(float[] rotationMatrix, float[] orientation, float initialAzimuth) {
+                lastYaw = (float) Math.toDegrees(orientation[0]);
+                lastPitch = (float) Math.toDegrees(orientation[1]);
+                lastRoll = (float) Math.toDegrees(orientation[2]);
                 scheduleFrame();
             }
 
@@ -304,57 +308,13 @@ public class BattleFragment extends Fragment {
 
             cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
                 if (source != null) {
-                    if (source instanceof ExternalCameraSource) {
-                        showRtspStreamingUI();
-                        source.setStatusListener((message, isError, isRetrying) -> rtspHandler.post(() -> {
-                            if (message == null) {
-                                if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.GONE);
-                            } else {
-                                showRtspStatus(message, isError, isRetrying);
-                            }
-                        }));
-                    } else {
-                        hideRtspStreamingUI();
-                    }
-                    source.start(new CameraSource.CameraSourceListener() {
-                        @Override
-                        public void onFrame(ImageProxy image) {
-                            frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
-                        }
-
-                        @Override
-                        public void onFrame(Mat frame) {
-                            frameProcessor.processFrame(frame, System.nanoTime(), lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
-                        }
-                    });
+                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
                 }
             });
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                if (current instanceof ExternalCameraSource) {
-                    showRtspStreamingUI();
-                    current.setStatusListener((message, isError, isRetrying) -> rtspHandler.post(() -> {
-                        if (message == null) {
-                            if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.GONE);
-                        } else {
-                            showRtspStatus(message, isError, isRetrying);
-                        }
-                    }));
-                } else {
-                    hideRtspStreamingUI();
-                }
-                current.start(new CameraSource.CameraSourceListener() {
-                    @Override
-                    public void onFrame(ImageProxy image) {
-                        frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
-                    }
-
-                    @Override
-                    public void onFrame(Mat frame) {
-                        frameProcessor.processFrame(frame, System.nanoTime(), lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
-                    }
-                });
+                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
             }
         }
     }
@@ -458,22 +418,23 @@ public class BattleFragment extends Fragment {
     private void updateVITInfo() {
         if (vitInfoText == null || frameProcessor == null) return;
         VITTracker.TargetState ts = frameProcessor.getLastTargetState();
-        if (ts == null || !ts.detected) {
-            vitInfoText.setText("VIT: поиск...");
-            return;
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== CAMERA ===\n");
+        sb.append(String.format("Pitch: %7.2f (Rate: %6.1f deg/s)\n", lastPitch, Math.toDegrees(lastGyroX)));
+        sb.append(String.format("Yaw:   %7.2f (Rate: %6.1f deg/s)\n", lastYaw, Math.toDegrees(lastGyroY)));
+        sb.append(String.format("Roll:  %7.2f (Rate: %6.1f deg/s)\n", lastRoll, Math.toDegrees(lastGyroZ)));
+        
+        sb.append("\n=== TRACKER ===\n");
+        if (ts != null && ts.detected) {
+            sb.append(String.format("Blob: x=%.0f y=%.0f\n", ts.bboxX + ts.bboxW/2f, ts.bboxY + ts.bboxH/2f));
+            sb.append(String.format("Size: %.1fpx\n", ts.bboxW));
+            sb.append(String.format("Conf: %.2f", ts.confidence));
+        } else {
+            sb.append("ПОИСК...");
         }
-        String info = String.format(
-            "VIT: %s | D=%.0fм | V=(%.1f,%.1f,%.1f)м/с\nAz=%.1f° El=%.1f° | C=%.2f",
-            ts.tracking ? "ТРЕКИНГ" : "DETECT",
-            ts.distanceM,
-            ts.velX, ts.velY, ts.velZ,
-            ts.azimuthDeg, ts.elevationDeg,
-            ts.confidence
-        );
-        if (ts.tracking) {
-            info += String.format("\nLead: (%.1f,%.1f,%.1f)м", ts.leadX, ts.leadY, ts.leadZ);
-        }
-        vitInfoText.setText(info);
+        
+        vitInfoText.setText(sb.toString());
     }
 
     private void handleCalibrateClick() {

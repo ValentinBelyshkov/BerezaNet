@@ -157,48 +157,18 @@ public class VITTracker {
 
     /**
      * Обработать кадр
-     *
-     * @param rgbaBuffer       Direct ByteBuffer с RGBA данными кадра
-     * @param width            Ширина кадра
-     * @param height           Высота кадра
-     * @param frameTimestampNs Таймстемп кадра (наносекунды)
-     * @param gyroX            Гироскоп X (rad/s)
-     * @param gyroY            Гироскоп Y (rad/s)
-     * @param gyroZ            Гироскоп Z (rad/s)
-     * @param gyroTimestampNs  Таймстемп гироскопа (наносекунды)
-     */
-    public TargetState processFrame(
-        ByteBuffer rgbaBuffer, int width, int height, long frameTimestampNs,
-        float gyroX, float gyroY, float gyroZ, long gyroTimestampNs
-    ) {
-        return processFrame(rgbaBuffer, width, height, frameTimestampNs,
-            gyroX, gyroY, gyroZ, gyroTimestampNs, 2.0f);
-    }
-
-    /**
-     * Обработать кадр
-     *
-     * @param rgbaBuffer       Direct ByteBuffer с RGBA данными кадра
-     * @param width            Ширина кадра
-     * @param height           Высота кадра
-     * @param frameTimestampNs Таймстемп кадра (наносекунды)
-     * @param gyroX            Гироскоп X (rad/s)
-     * @param gyroY            Гироскоп Y (rad/s)
-     * @param gyroZ            Гироскоп Z (rad/s)
-     * @param gyroTimestampNs  Таймстемп гироскопа (наносекунды)
-     * @param tFlightSec       Время полёта снаряда (секунды, по умолчанию 2.0)
      */
     public TargetState processFrame(
         ByteBuffer rgbaBuffer, int width, int height, long frameTimestampNs,
         float gyroX, float gyroY, float gyroZ, long gyroTimestampNs,
-        float tFlightSec
+        float tFlightSec, float pitch, float yaw, float roll
     ) {
         if (!initialized || !libraryLoaded) {
             return TargetState.EMPTY;
         }
 
         return nativeProcessFrame(rgbaBuffer, width, height, frameTimestampNs,
-            gyroX, gyroY, gyroZ, gyroTimestampNs, tFlightSec);
+            gyroX, gyroY, gyroZ, gyroTimestampNs, tFlightSec, pitch, yaw, roll);
     }
 
     /**
@@ -228,6 +198,20 @@ public class VITTracker {
         nativeRelease();
     }
 
+    public void drawOverlay(
+        org.opencv.core.Mat mat, TargetState ts,
+        float pitch, float yaw, float roll,
+        float gx, float gy, float gz
+    ) {
+        if (!initialized || !libraryLoaded) return;
+        nativeDrawOverlay(mat.getNativeObjAddr(),
+            ts.detected, ts.tracking,
+            ts.bboxX, ts.bboxY, ts.bboxW, ts.bboxH,
+            ts.confidence,
+            pitch, yaw, roll,
+            gx, gy, gz);
+    }
+
     // ======== Native methods (instance methods matching JNI bridge) ========
 
     private native boolean nativeInit(
@@ -245,10 +229,23 @@ public class VITTracker {
         float gyroY,
         float gyroZ,
         long gyroTimestampNs,
-        float tFlightSec
+        float tFlightSec,
+        float pitch,
+        float yaw,
+        float roll
     );
 
     private native boolean nativeGetStabMatrix(float[] outMatrix);
+
+    private native void nativeDrawOverlay(
+        long matAddr,
+        boolean detected,
+        boolean tracking,
+        float bboxX, float bboxY, float bboxW, float bboxH,
+        float confidence,
+        float pitch, float yaw, float roll,
+        float gx, float gy, float gz
+    );
 
     private native void nativeReset();
 
