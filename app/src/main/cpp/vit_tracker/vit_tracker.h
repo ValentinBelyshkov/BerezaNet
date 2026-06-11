@@ -217,9 +217,10 @@ private:
     // Матрица стабилизации для OpenGL
     float stab_homography_[9] = {1,0,0, 0,1,0, 0,0,1};
 
-    // K and K_inv
+    // K, K_inv and distortion coefficients
     cv::Mat K_;
     cv::Mat K_inv_;
+    cv::Mat dist_coeffs_;
 
     // Парсинг calib.json
     bool parseCalibration(const char* json);

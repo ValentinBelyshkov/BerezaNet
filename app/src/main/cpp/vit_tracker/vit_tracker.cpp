@@ -7,10 +7,16 @@
 // ======== Constructor / Destructor ========
 
 VITTracker::VITTracker()
-    : fx_(0), fy_(0), cx_(0), cy_(0), k1_(0), k2_(0)
+    : fx_(0), fy_(0), cx_(0), cy_(0), k1_(0), k2_(0),
+      calib_loaded_(false), tracking_active_(false), tracker_initialized_(false),
+      velocity_initialized_(false), last_frame_ts_ns_(0), lost_counter_(0),
+      frames_since_detection_(0), vel_x_filtered_(0), vel_y_filtered_(0), vel_z_filtered_(0)
 {
     std::fill(imu_to_cam_, imu_to_cam_ + 9, 0.0f);
     imu_to_cam_[0] = imu_to_cam_[4] = imu_to_cam_[8] = 1.0f; // identity
+
+    std::fill(stab_homography_, stab_homography_ + 9, 0.0f);
+    stab_homography_[0] = stab_homography_[4] = stab_homography_[8] = 1.0f;
 }
 
 VITTracker::~VITTracker() {
@@ -42,6 +48,9 @@ bool VITTracker::init(const char* calib_json, float target_w, float target_l) {
 
     K_inv_ = K_.inv();
 
+    // Build distortion coefficients
+    dist_coeffs_ = (cv::Mat_<double>(4,1) << k1_, k2_, 0.0, 0.0);
+
     // Build R_imu_to_cam
     // imu_to_cam_ is stored row-major, OpenCV Mat is row-major
     VIT_LOGI("Calibration loaded: fx=%.1f fy=%.1f cx=%.1f cy=%.1f",
@@ -55,9 +64,7 @@ bool VITTracker::init(const char* calib_json, float target_w, float target_l) {
 // ======== Release ========
 
 void VITTracker::release() {
-    if (tracker_) {
-        tracker_.release();
-    }
+    tracker_ = nullptr;
     gyro_buffer_.clear();
     pos_buffer_.clear();
     tracking_active_ = false;
@@ -69,9 +76,7 @@ void VITTracker::release() {
 // ======== Reset ========
 
 void VITTracker::reset() {
-    if (tracker_) {
-        tracker_.release();
-    }
+    tracker_ = nullptr;
     gyro_buffer_.clear();
     pos_buffer_.clear();
     tracking_active_ = false;
@@ -129,31 +134,35 @@ bool VITTracker::parseCalibration(const char* json) {
     if (matPos != std::string::npos) {
         auto bracketPos = s.find('[', matPos);
         if (bracketPos != std::string::npos) {
-            int count = 0;
             int row = 0, col = 0;
             auto p = bracketPos;
+            int depth = 0;
             while (p < s.size() && row < 3) {
-                if (s[p] == '[') count++;
-                else if (s[p] == ']') count--;
-                else if (s[p] == '-' || isdigit(s[p]) || s[p] == '.') {
-                    auto start = p;
-                    bool neg = (s[p] == '-');
-                    if (neg) p++;
-                    while (p < s.size() && (isdigit(s[p]) || s[p] == '.')) p++;
-                    if (p > start) {
-                        float val = std::stof(s.substr(start, p - start));
-                        if (row < 3 && col < 3) {
-                            imu_to_cam_[row * 3 + col] = val;
-                            col++;
-                        }
+                if (s[p] == '[') {
+                    depth++;
+                } else if (s[p] == ']') {
+                    depth--;
+                    // Закрытие внутренней скобки = конец строки матрицы
+                    if (depth == 1 && col > 0) {
+                        row++;
+                        col = 0;
                     }
-                    continue;
+                } else if (s[p] == '-' || isdigit(s[p]) || s[p] == '.') {
+                    auto start = p;
+                    if (s[p] == '-') p++;
+                    while (p < s.size() && (isdigit(s[p]) || s[p] == '.' || s[p] == 'e' || s[p] == 'E' || s[p] == '+' || s[p] == '-')) {
+                        // Поддержка научной нотации, но осторожно с '-' после 'e'
+                        if ((s[p] == '+' || s[p] == '-') && p > start && s[p-1] != 'e' && s[p-1] != 'E') break;
+                        p++;
+                    }
+                    if (p > start && row < 3 && col < 3) {
+                        float val = std::stof(s.substr(start, p - start));
+                        imu_to_cam_[row * 3 + col] = val;
+                        col++;
+                    }
+                    continue; // не инкрементируем p
                 }
                 p++;
-                if (count == 2 && col == 3) {
-                    row++;
-                    col = 0;
-                }
             }
         }
     }
@@ -181,45 +190,52 @@ TargetState VITTracker::processFrame(
         return state;
     }
 
+    // Always update last_frame_ts_ns_ if it is the first frame
+    if (last_frame_ts_ns_ == 0) {
+        last_frame_ts_ns_ = frame_ts_ns;
+    }
+
     // 1. Push gyro sample into buffer
     gyro_buffer_.push(gyro_ts_ns, gyro_x, gyro_y, gyro_z);
 
     // 2. Create OpenCV Mat from RGBA data (no copy - wraps the buffer)
     cv::Mat frame(h, w, CV_8UC4, rgba_data);
 
-    // 3. Sync gyro - find or interpolate gyro for this frame timestamp
+    // 3. Compensation for distortion
+    cv::Mat undistorted;
+    cv::undistort(frame, undistorted, K_, dist_coeffs_);
+
+    // 4. Sync gyro - find or interpolate gyro for this frame timestamp
     float gx = 0, gy = 0, gz = 0;
     bool gyro_ok = syncGyro(frame_ts_ns, gx, gy, gz);
-    if (!gyro_ok) {
-        // No gyro data available, process without stabilization
-        VIT_LOGW("No gyro data for frame ts=%lld", (long long)frame_ts_ns);
-    } else {
+    cv::Mat frame_for_tracking;
+
+    if (gyro_ok) {
         // Transform gyro to camera coordinate system using imu_to_cam rotation
         float gx_cam = imu_to_cam_[0] * gx + imu_to_cam_[1] * gy + imu_to_cam_[2] * gz;
         float gy_cam = imu_to_cam_[3] * gx + imu_to_cam_[4] * gy + imu_to_cam_[5] * gz;
         float gz_cam = imu_to_cam_[6] * gx + imu_to_cam_[7] * gy + imu_to_cam_[8] * gz;
 
-        // 4. Compute dt since last frame
+        // Compute dt since last frame
         float dt_sec = 0.0f;
-        if (last_frame_ts_ns_ > 0) {
+        if (last_frame_ts_ns_ > 0 && frame_ts_ns > last_frame_ts_ns_) {
             dt_sec = (float)((double)(frame_ts_ns - last_frame_ts_ns_) / 1.0e9);
             if (dt_sec > 0.1f) dt_sec = 0.033f; // cap at ~30fps
         } else {
             dt_sec = 0.033f; // default 30fps
         }
 
-        // 5. Compute differential rotation dR = exp(ω × dt)
+        // Compute differential rotation dR = exp(ω × dt)
         cv::Mat dR = computeDifferentialRotation(gx_cam, gy_cam, gz_cam, dt_sec);
 
-        // 6. Stabilize frame using homography H = K * dR * K_inv
+        // Stabilize frame using homography H = K * dR * K_inv
         cv::Mat stabilized;
-        stabilizeFrame(frame, stabilized, dR);
+        stabilizeFrame(undistorted, stabilized, dR);
 
         // Store dR for next frame
         last_dR_ = dR.clone();
-        last_frame_ts_ns_ = frame_ts_ns;
 
-        // 7. Update stab_homography_ for OpenGL
+        // Update stab_homography_ for OpenGL
         cv::Mat H = K_ * dR * K_inv_;
         // Store H_inv for OpenGL (we need to transform UVs)
         cv::Mat H_inv = H.inv(cv::DECOMP_LU);
@@ -229,90 +245,98 @@ TargetState VITTracker::processFrame(
             }
         }
 
-        // 8. Detection/Tracking on stabilized frame
-        cv::Rect2d bbox;
-        float confidence = 0.0f;
+        frame_for_tracking = stabilized;
+    } else {
+        VIT_LOGW("No gyro data for frame ts=%lld, using raw frame", (long long)frame_ts_ns);
+        frame_for_tracking = undistorted;
 
-        if (tracking_active_ && tracker_initialized_) {
-            bool track_ok = trackTarget(stabilized, bbox);
-            if (track_ok) {
-                lost_counter_ = 0;
-                frames_since_detection_++;
-                bbox_ = bbox;
-                state.detected = true;
-                state.tracking = true;
-                state.confidence = std::min(1.0f, 0.5f + frames_since_detection_ * 0.05f);
+        // Reset stabilization homography to identity since no stabilization is applied
+        std::fill(stab_homography_, stab_homography_ + 9, 0.0f);
+        stab_homography_[0] = stab_homography_[4] = stab_homography_[8] = 1.0f;
+    }
 
-                // 9. Triangulation
-                float wx, wy, wz;
-                compute3DPosition(bbox, wx, wy, wz);
-                state.bbox_x = (float)bbox.x;
-                state.bbox_y = (float)bbox.y;
-                state.bbox_w = (float)bbox.width;
-                state.bbox_h = (float)bbox.height;
-                state.world_x_m = wx;
-                state.world_y_m = wy;
-                state.world_z_m = wz;
+    // Always update last_frame_ts_ns_
+    last_frame_ts_ns_ = frame_ts_ns;
 
-                // Distance
-                if (bbox.width > 0) {
-                    state.distance_m = (target_width_m_ * fx_) / (float)bbox.width;
-                }
+    // 5. Detection/Tracking on frame_for_tracking
+    cv::Rect2d bbox;
+    float confidence = 0.0f;
 
-                // 10. Update velocity
-                updateVelocity(wx, wy, wz, frame_ts_ns);
-                state.vel_x_mps = vel_x_filtered_;
-                state.vel_y_mps = vel_y_filtered_;
-                state.vel_z_mps = vel_z_filtered_;
+    if (tracking_active_ && tracker_initialized_) {
+        bool track_ok = trackTarget(frame_for_tracking, bbox);
+        if (track_ok) {
+            lost_counter_ = 0;
+            frames_since_detection_++;
+            bbox_ = bbox;
+            state.detected = true;
+            state.tracking = true;
+            state.confidence = std::min(1.0f, 0.5f + frames_since_detection_ * 0.05f);
 
-                // 11. Lead point
-                computeLeadPoint(wx, wy, wz, t_flight_sec,
-                                 state.lead_x_m, state.lead_y_m, state.lead_z_m);
+            // Triangulation
+            float wx, wy, wz;
+            compute3DPosition(bbox, wx, wy, wz);
+            state.bbox_x = (float)bbox.x;
+            state.bbox_y = (float)bbox.y;
+            state.bbox_w = (float)bbox.width;
+            state.bbox_h = (float)bbox.height;
+            state.world_x_m = wx;
+            state.world_y_m = wy;
+            state.world_z_m = wz;
 
-                // 12. Angles
-                computeAngles(wx, wy, wz,
-                              state.azimuth_deg, state.elevation_deg);
-            } else {
-                lost_counter_++;
-                frames_since_detection_ = 0;
-                if (lost_counter_ > 5) {
-                    tracking_active_ = false;
-                    tracker_initialized_ = false;
-                    if (tracker_) {
-                        tracker_.release();
-                    }
-                    VIT_LOGI("Tracker lost target, switching to detection mode");
-                }
-                state.confidence = std::max(0.0f, 1.0f - lost_counter_ * 0.2f);
-            }
+            // Distance
+            state.distance_m = wz;
+
+            // Update velocity
+            updateVelocity(wx, wy, wz, frame_ts_ns);
+            state.vel_x_mps = vel_x_filtered_;
+            state.vel_y_mps = vel_y_filtered_;
+            state.vel_z_mps = vel_z_filtered_;
+
+            // Lead point
+            computeLeadPoint(wx, wy, wz, t_flight_sec,
+                             state.lead_x_m, state.lead_y_m, state.lead_z_m);
+
+            // Angles
+            computeAngles(wx, wy, wz,
+                          state.azimuth_deg, state.elevation_deg);
         } else {
-            // Detection mode
-            cv::Rect2d detected_bbox;
-            float conf = 0.0f;
-            if (detectTarget(stabilized, detected_bbox, conf)) {
-                lost_counter_ = 0;
-                bbox_ = detected_bbox;
-                state.detected = true;
-                state.tracking = false;
-                state.confidence = conf;
-                state.bbox_x = (float)detected_bbox.x;
-                state.bbox_y = (float)detected_bbox.y;
-                state.bbox_w = (float)detected_bbox.width;
-                state.bbox_h = (float)detected_bbox.height;
+            lost_counter_++;
+            frames_since_detection_ = 0;
+            if (lost_counter_ > 5) {
+                tracking_active_ = false;
+                tracker_initialized_ = false;
+                tracker_ = nullptr;
+                VIT_LOGI("Tracker lost target, switching to detection mode");
+            }
+            state.confidence = std::max(0.0f, 1.0f - lost_counter_ * 0.2f);
+        }
+    } else {
+        // Detection mode
+        cv::Rect2d detected_bbox;
+        float conf = 0.0f;
+        if (detectTarget(frame_for_tracking, detected_bbox, conf)) {
+            lost_counter_ = 0;
+            bbox_ = detected_bbox;
+            state.detected = true;
+            state.tracking = false;
+            state.confidence = conf;
+            state.bbox_x = (float)detected_bbox.x;
+            state.bbox_y = (float)detected_bbox.y;
+            state.bbox_w = (float)detected_bbox.width;
+            state.bbox_h = (float)detected_bbox.height;
 
-                // Initialize tracker
-                try {
-                    tracker_ = cv::TrackerMIL::create();
-                    tracker_->init(stabilized, detected_bbox);
-                    tracker_initialized_ = true;
-                    tracking_active_ = true;
-                    frames_since_detection_ = 0;
-                    VIT_LOGI("Tracker initialized at [%.0f, %.0f, %.0f, %.0f]",
-                             detected_bbox.x, detected_bbox.y,
-                             detected_bbox.width, detected_bbox.height);
-                } catch (cv::Exception& e) {
-                    VIT_LOGE("Tracker init failed: %s", e.what());
-                }
+            // Initialize tracker
+            try {
+                tracker_ = cv::TrackerMIL::create();
+                tracker_->init(frame_for_tracking, detected_bbox);
+                tracker_initialized_ = true;
+                tracking_active_ = true;
+                frames_since_detection_ = 0;
+                VIT_LOGI("Tracker initialized at [%.0f, %.0f, %.0f, %.0f]",
+                         detected_bbox.x, detected_bbox.y,
+                         detected_bbox.width, detected_bbox.height);
+            } catch (cv::Exception& e) {
+                VIT_LOGE("Tracker init failed: %s", e.what());
             }
         }
     }
@@ -385,7 +409,8 @@ bool VITTracker::detectTarget(const cv::Mat& frame, cv::Rect2d& out_bbox, float&
 
     // Adaptive threshold to find dark objects against sky background
     cv::Mat binary;
-    cv::threshold(gray, binary, 80, 255, cv::THRESH_BINARY_INV);
+    cv::adaptiveThreshold(gray, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C, 
+                          cv::THRESH_BINARY_INV, 21, 10);
 
     // Morphological cleanup
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
@@ -467,10 +492,11 @@ void VITTracker::compute3DPosition(const cv::Rect2d& bbox, float& x, float& y, f
     float v = (float)(bbox.y + bbox.height / 2.0);
 
     // Distance from width
-    if (bbox.width > 1.0f) {
+    if (bbox.width > 2.0f) {
         z = (target_width_m_ * fx_) / (float)bbox.width;
+        z = std::min(z, 5000.0f); // cap at 5km
     } else {
-        z = 1000.0f; // fallback
+        z = 1000.0f;
     }
 
     // 3D position in camera coordinates
@@ -507,9 +533,10 @@ void VITTracker::updateVelocity(float x, float y, float z, int64_t ts_ns) {
     float vy = (curr.y - prev.y) / (float)dt_sec;
     float vz = (curr.z - prev.z) / (float)dt_sec;
 
-    // Sanity check: reject velocities > 100 m/s
+    // Sanity check: reject velocities > 50 m/s (180 km/h - more realistic for a drone)
     float speed = std::sqrt(vx*vx + vy*vy + vz*vz);
-    if (speed > 100.0f) {
+    float max_speed = 50.0f;
+    if (speed > max_speed) {
         VIT_LOGW("Velocity outlier: %.1f m/s, rejecting", speed);
         return;
     }
