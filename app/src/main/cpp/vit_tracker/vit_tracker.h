@@ -172,7 +172,8 @@ public:
     TargetState processFrame(
         uint8_t* rgba_data, int w, int h, int64_t frame_ts_ns,
         float gyro_x, float gyro_y, float gyro_z, int64_t gyro_ts_ns,
-        float t_flight_sec
+        float t_flight_sec,
+        float pitch = 0, float yaw = 0, float roll = 0
     );
     void reset();
     void release();
@@ -180,7 +181,15 @@ public:
     // Для OpenGL шейдера: получить матрицу стабилизации H⁻¹
     bool getStabHomography(float out_matrix[9]) const;
 
+    void drawOverlay(cv::Mat& frame, const TargetState& state, 
+                     float pitch, float yaw, float roll,
+                     float gx, float gy, float gz);
+
 private:
+    struct Blob {
+        float x, y, size;
+    };
+    std::vector<Blob> last_blobs_;
     // Калибровка
     float fx_, fy_, cx_, cy_;
     float k1_, k2_;
