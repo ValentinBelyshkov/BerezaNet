@@ -79,7 +79,7 @@ extern "C" {
  * aligned — 1 если ствол совмещён с точкой упреждения, 0 если нет
  */
 JNIEXPORT void JNICALL
-Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
+Java_com_edgedetection_jni_EdgeDetector_detectEdgesWithReticle(
         JNIEnv *env,
         jclass clazz,
         jlong inputAddr,
@@ -188,7 +188,7 @@ Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
  * Обратная совместимость: старый метод без прицела
  */
 JNIEXPORT void JNICALL
-Java_com_edgedetection_EdgeDetector_detectEdges(
+Java_com_edgedetection_jni_EdgeDetector_detectEdges(
         JNIEnv *env,
         jclass clazz,
         jlong inputAddr,
@@ -198,7 +198,7 @@ Java_com_edgedetection_EdgeDetector_detectEdges(
         jint blurSize) {
 
     // Вызываем новый метод без цели
-    Java_com_edgedetection_EdgeDetector_detectEdgesWithReticle(
+    Java_com_edgedetection_jni_EdgeDetector_detectEdgesWithReticle(
             env, clazz, inputAddr, outputAddr,
             lowerThreshold, upperThreshold, blurSize,
             0, 0, JNI_FALSE, JNI_FALSE

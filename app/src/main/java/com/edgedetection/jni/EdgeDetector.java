@@ -1,4 +1,4 @@
-package com.edgedetection;
+package com.edgedetection.jni;
 
 import android.util.Log;
 

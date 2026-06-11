@@ -34,7 +34,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.edgedetection.R;
-import com.edgedetection.EdgeDetector;
+import com.edgedetection.jni.EdgeDetector;
 import com.edgedetection.core.camera.CameraManager;
 import com.edgedetection.core.camera.CameraSource;
 import com.edgedetection.core.camera.ExternalCameraSource;

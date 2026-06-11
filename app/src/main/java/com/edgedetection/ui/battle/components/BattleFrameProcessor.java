@@ -5,7 +5,7 @@ import android.util.Log;
 
 import androidx.camera.core.ImageProxy;
 
-import com.edgedetection.EdgeDetector;
+import com.edgedetection.jni.EdgeDetector;
 import com.edgedetection.jni.VITTracker;
 import com.edgedetection.opengl.EdgeDetectionGLView;
 import com.edgedetection.ui.battle.BattleViewModel;
