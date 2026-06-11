@@ -171,4 +171,50 @@ public class BattleFrameProcessor {
     public VITTracker.TargetState getLastTargetState() {
         return lastTargetState;
     }
+
+    public static class FrameMetadata {
+        public final int width;
+        public final int height;
+        public final long frameTimestampNs;
+        public final long wallClockTimestampNs;
+        public final float gyroX;
+        public final float gyroY;
+        public final float gyroZ;
+        public final long gyroTimestampNs;
+        public final float pitchDeg;
+        public final float yawDeg;
+        public final float rollDeg;
+        public final boolean targetDetected;
+        public final boolean targetTracking;
+        public final int targetBboxX;
+        public final int targetBboxY;
+        public final int targetBboxW;
+        public final int targetBboxH;
+        public final float targetConfidence;
+
+        public FrameMetadata(int width, int height, long frameTimestampNs, long wallClockTimestampNs,
+                           float gyroX, float gyroY, float gyroZ, long gyroTimestampNs,
+                           float pitchDeg, float yawDeg, float rollDeg,
+                           boolean targetDetected, boolean targetTracking,
+                           int targetBboxX, int targetBboxY, int targetBboxW, int targetBboxH, float targetConfidence) {
+            this.width = width;
+            this.height = height;
+            this.frameTimestampNs = frameTimestampNs;
+            this.wallClockTimestampNs = wallClockTimestampNs;
+            this.gyroX = gyroX;
+            this.gyroY = gyroY;
+            this.gyroZ = gyroZ;
+            this.gyroTimestampNs = gyroTimestampNs;
+            this.pitchDeg = pitchDeg;
+            this.yawDeg = yawDeg;
+            this.rollDeg = rollDeg;
+            this.targetDetected = targetDetected;
+            this.targetTracking = targetTracking;
+            this.targetBboxX = targetBboxX;
+            this.targetBboxY = targetBboxY;
+            this.targetBboxW = targetBboxW;
+            this.targetBboxH = targetBboxH;
+            this.targetConfidence = targetConfidence;
+        }
+    }
 }

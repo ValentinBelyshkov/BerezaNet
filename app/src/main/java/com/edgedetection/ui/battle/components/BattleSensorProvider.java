@@ -8,6 +8,9 @@ import android.hardware.SensorManager;
 import android.os.Handler;
 import android.util.Log;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class BattleSensorProvider implements SensorEventListener {
     private static final String TAG = "BattleSensorProvider";
     
@@ -21,6 +24,8 @@ public class BattleSensorProvider implements SensorEventListener {
     private final Sensor gyroscopeSensor;
     private final Handler imuHandler;
     private final OnSensorChangedListener listener;
+
+    private final List<ImuSample> imuSamples = new ArrayList<>();
 
     private final float[] rotationMatrix = new float[16];
     private final float[] remappedMatrix = new float[16];
@@ -72,13 +77,16 @@ public class BattleSensorProvider implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+        long wallClockNs = System.nanoTime();
+        synchronized (imuSamples) {
+            imuSamples.add(new ImuSample(event.sensor.getType(), event.timestamp, wallClockNs, event.values));
+        }
         if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
             listener.onGyroscopeUpdated(event.values[0], event.values[1], event.values[2], event.timestamp);
             return;
         }
 
         if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
-        
         System.arraycopy(event.values, 0, lastRotationVector, 0, Math.min(event.values.length, lastRotationVector.length));
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
 
@@ -104,6 +112,18 @@ public class BattleSensorProvider implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+
+    public void clearImuSamples() {
+        synchronized (imuSamples) {
+            imuSamples.clear();
+        }
+    }
+
+    public List<ImuSample> getImuSamples() {
+        synchronized (imuSamples) {
+            return new ArrayList<>(imuSamples);
+        }
+    }
 
     public float[] getRotationMatrix() {
         return rotationMatrix;
@@ -152,5 +172,19 @@ public class BattleSensorProvider implements SensorEventListener {
 
     public boolean isCalibrating() {
         return isCalibrating;
+    }
+
+    public static class ImuSample {
+        public final int sensorType;
+        public final long timestampNs;
+        public final long wallClockTimestampNs;
+        public final float[] values;
+
+        public ImuSample(int sensorType, long timestampNs, long wallClockTimestampNs, float[] values) {
+            this.sensorType = sensorType;
+            this.timestampNs = timestampNs;
+            this.wallClockTimestampNs = wallClockTimestampNs;
+            this.values = values != null ? values.clone() : new float[0];
+        }
     }
 }
