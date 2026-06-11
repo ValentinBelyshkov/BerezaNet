@@ -247,7 +247,7 @@ TargetState VITTracker::processFrame(
 
         frame_for_tracking = stabilized;
     } else {
-        VIT_LOGW("No gyro data for frame ts=%" PRId64 ", using raw frame", (int64_t)frame_ts_ns);
+        VIT_LOGW("No gyro data for frame ts=%lld, using raw frame", (long long)frame_ts_ns);
         frame_for_tracking = undistorted;
 
         // Reset stabilization homography to identity since no stabilization is applied
