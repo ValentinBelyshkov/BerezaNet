@@ -16,10 +16,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import org.opencv.core.Mat;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -87,6 +91,16 @@ public class BattleFragment extends Fragment {
     private Button calibrateButton;
     private Button toggleEdgesButton;
     private TextView gpsWarning;
+
+    // RTSP Views
+    private FrameLayout rtspContainer;
+    private View rtspErrorOverlay;
+    private ProgressBar rtspProgressBar;
+    private TextView rtspErrorText;
+    private TextView rtspRetryText;
+
+    // RTSP State Tracking
+    private final Handler rtspHandler = new Handler(Looper.getMainLooper());
 
     // --- Simulation state ---
     private volatile double droneLat, droneLon, droneAlt;
@@ -188,6 +202,12 @@ public class BattleFragment extends Fragment {
         calibrateButton = view.findViewById(R.id.calibrate_button);
         toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
 
+        rtspContainer = view.findViewById(R.id.rtsp_container);
+        rtspErrorOverlay = view.findViewById(R.id.rtsp_error_overlay);
+        rtspProgressBar = view.findViewById(R.id.rtsp_progress_bar);
+        rtspErrorText = view.findViewById(R.id.rtsp_error_text);
+        rtspRetryText = view.findViewById(R.id.rtsp_retry_text);
+
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
             ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
         });
@@ -272,41 +292,6 @@ public class BattleFragment extends Fragment {
         });
     }
 
-    private void checkPermissions() {
-        List<String> need = new ArrayList<>();
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            need.add(Manifest.permission.CAMERA);
-        }
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            need.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-
-        if (!need.isEmpty()) {
-            requestPermissions(need.toArray(new String[0]), AR_PERMISSION_REQUEST);
-        } else {
-            startCamera();
-            locationManager.startLocationUpdates();
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
-        if (requestCode == AR_PERMISSION_REQUEST) {
-            boolean cam = true, loc = true;
-            for (int i = 0; i < permissions.length; i++) {
-                if (permissions[i].equals(Manifest.permission.CAMERA) && grantResults[i] != PackageManager.PERMISSION_GRANTED)
-                    cam = false;
-                if (permissions[i].equals(Manifest.permission.ACCESS_FINE_LOCATION) && grantResults[i] != PackageManager.PERMISSION_GRANTED)
-                    loc = false;
-            }
-            if (cam) startCamera();
-            if (loc) locationManager.startLocationUpdates();
-        }
-    }
-
     private void startCamera() {
         if (cameraExecutor == null) {
             cameraExecutor = Executors.newSingleThreadExecutor();
@@ -319,15 +304,92 @@ public class BattleFragment extends Fragment {
 
             cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
                 if (source != null) {
-                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                    if (source instanceof ExternalCameraSource) {
+                        showRtspStreamingUI();
+                        source.setStatusListener((message, isError, isRetrying) -> rtspHandler.post(() -> {
+                            if (message == null) {
+                                if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.GONE);
+                            } else {
+                                showRtspStatus(message, isError, isRetrying);
+                            }
+                        }));
+                    } else {
+                        hideRtspStreamingUI();
+                    }
+                    source.start(new CameraSource.CameraSourceListener() {
+                        @Override
+                        public void onFrame(ImageProxy image) {
+                            frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
+                        }
+
+                        @Override
+                        public void onFrame(Mat frame) {
+                            frameProcessor.processFrame(frame, System.nanoTime(), lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
+                        }
+                    });
                 }
             });
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
+                if (current instanceof ExternalCameraSource) {
+                    showRtspStreamingUI();
+                    current.setStatusListener((message, isError, isRetrying) -> rtspHandler.post(() -> {
+                        if (message == null) {
+                            if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.GONE);
+                        } else {
+                            showRtspStatus(message, isError, isRetrying);
+                        }
+                    }));
+                } else {
+                    hideRtspStreamingUI();
+                }
+                current.start(new CameraSource.CameraSourceListener() {
+                    @Override
+                    public void onFrame(ImageProxy image) {
+                        frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
+                    }
+
+                    @Override
+                    public void onFrame(Mat frame) {
+                        frameProcessor.processFrame(frame, System.nanoTime(), lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs);
+                    }
+                });
             }
         }
+    }
+
+    private void showRtspStatus(String message, boolean isError, boolean isRetrying) {
+        if (rtspErrorOverlay != null) rtspErrorOverlay.setVisibility(View.VISIBLE);
+        if (rtspProgressBar != null) rtspProgressBar.setVisibility(isError ? View.GONE : View.VISIBLE);
+        if (rtspErrorText != null) {
+            rtspErrorText.setText(message);
+            rtspErrorText.setTextColor(isError ? 0xFFFF4444 : 0xFFFFFFFF);
+        }
+        if (rtspRetryText != null) rtspRetryText.setVisibility(isRetrying ? View.VISIBLE : View.GONE);
+    }
+
+    private void showRtspStreamingUI() {
+        if (rtspContainer != null) rtspContainer.setVisibility(View.VISIBLE);
+        // glView should stay visible because OpenCV frames will be rendered there
+        if (glView != null) glView.setVisibility(View.VISIBLE);
+        
+        // Hide standard AR overlays if they are not supposed to be shown over RTSP
+        View ar = getView() != null ? getView().findViewById(R.id.ar_overlay) : null;
+        if (ar != null) ar.setVisibility(View.GONE);
+        if (bulletOverlay != null) bulletOverlay.setVisibility(View.GONE);
+        if (calibrateButton != null) calibrateButton.setVisibility(View.GONE);
+        if (toggleEdgesButton != null) toggleEdgesButton.setVisibility(View.VISIBLE); // Keep edge toggle
+    }
+
+    private void hideRtspStreamingUI() {
+        if (rtspContainer != null) rtspContainer.setVisibility(View.GONE);
+        if (glView != null) glView.setVisibility(View.VISIBLE);
+        View ar = getView() != null ? getView().findViewById(R.id.ar_overlay) : null;
+        if (ar != null) ar.setVisibility(View.VISIBLE);
+        if (bulletOverlay != null) bulletOverlay.setVisibility(View.VISIBLE);
+        if (calibrateButton != null) calibrateButton.setVisibility(View.VISIBLE);
+        if (toggleEdgesButton != null) toggleEdgesButton.setVisibility(View.VISIBLE);
     }
 
     private float camForwardX, camForwardY, camForwardZ;
@@ -481,7 +543,19 @@ public class BattleFragment extends Fragment {
         calibrationHandler.removeCallbacks(calibrationRunnable);
         calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
         if (frameProcessor != null) frameProcessor.resetTracker();
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+        
+        if (cameraManager != null) {
+            CameraSource current = cameraManager.getCurrentSource().getValue();
+            if (current instanceof ExternalCameraSource) {
+                showRtspStreamingUI();
+            } else {
+                hideRtspStreamingUI();
+                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
+        }
+
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locationManager.startLocationUpdates();
         requireActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
@@ -505,6 +579,13 @@ public class BattleFragment extends Fragment {
         super.onDestroyView();
         ballisticsManager.clear();
         if (choreographer != null) choreographer.removeFrameCallback(frameCallback);
+        rtspContainer = null;
+        rtspErrorOverlay = null;
+        rtspProgressBar = null;
+        rtspErrorText = null;
+        rtspRetryText = null;
+        rtspHandler.removeCallbacksAndMessages(null);
+
         if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) {
             cameraManager.getCurrentSource().getValue().stop();
             cameraManager = null;
