@@ -100,8 +100,14 @@ public class BattleFrameProcessor {
 
             // ======== VIT Tracker processing ========
             if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
+                int bufSize = rgba.width() * rgba.height() * 4;
+                ByteBuffer rgbaBuffer = ByteBuffer.allocateDirect(bufSize);
+                byte[] rgbaBytes = new byte[bufSize];
+                rgba.get(0, 0, rgbaBytes);
+                rgbaBuffer.put(rgbaBytes);
+                rgbaBuffer.position(0);
                 lastTargetState = vitTracker.processFrame(
-                        rgba,
+                        rgbaBuffer, rgba.width(), rgba.height(),
                         frameTimestampNs,
                         lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs,
                         T_FLIGHT_SEC,
