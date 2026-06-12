@@ -165,4 +165,14 @@ public abstract class MissionIntent {
         public final boolean enabled;
         public SetSoundEnabled(boolean enabled) { this.enabled = enabled; }
     }
+
+    public static final class SetTargetSize extends MissionIntent {
+        public final float targetSizeM;
+        public SetTargetSize(float targetSizeM) { this.targetSizeM = targetSizeM; }
+    }
+
+    public static final class SetBulletDiameter extends MissionIntent {
+        public final float bulletDiameterM;
+        public SetBulletDiameter(float bulletDiameterM) { this.bulletDiameterM = bulletDiameterM; }
+    }
 }

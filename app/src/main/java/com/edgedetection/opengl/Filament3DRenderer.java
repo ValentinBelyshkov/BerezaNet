@@ -103,6 +103,15 @@ public class Filament3DRenderer {
 
     private float[] mModelCenter = {0f, 0f, 0f};
     private float mModelRadius = 1.0f;
+    private volatile float mDroneScale = 1.0f;
+
+    public void setDroneScale(float scale) {
+        mDroneScale = Math.max(0.01f, scale);
+    }
+
+    public float getEffectiveModelRadius() {
+        return mModelRadius * mDroneScale;
+    }
 
     public Filament3DRenderer(Context context, SurfaceView surfaceView) {
         this(context, surfaceView, true);
@@ -593,34 +602,29 @@ public class Filament3DRenderer {
     public void setDronePosition(float x, float y, float z, float heading) {
         if (mDestroyed || mEngineDestroyed || mAsset == null) return;
         TransformManager tm = mEngine.getTransformManager();
+        float sc = mDroneScale;
+        float c = (float) Math.cos(heading), s = (float) Math.sin(heading);
+        float[] m = new float[16];
+        m[0] = sc*c;  m[4] = 0;  m[8]  = sc*s;  m[12] = x;
+        m[1] = 0;     m[5] = sc; m[9]  = 0;      m[13] = y;
+        m[2] = -sc*s; m[6] = 0;  m[10] = sc*c;   m[14] = z;
+        m[3] = 0;     m[7] = 0;  m[11] = 0;       m[15] = 1;
 
         int root = mAsset.getRoot();
         if (root != 0) {
             int inst = tm.getInstance(root);
             if (inst == 0) inst = tm.create(root);
-            float c = (float) Math.cos(heading), s = (float) Math.sin(heading);
-            float[] m = new float[16];
-            m[0] = c;   m[4] = 0; m[8]  = s;  m[12] = x;
-            m[1] = 0;   m[5] = 1; m[9]  = 0;  m[13] = y;
-            m[2] = -s;  m[6] = 0; m[10] = c;  m[14] = z;
-            m[3] = 0;   m[7] = 0; m[11] = 0;  m[15] = 1;
             tm.setTransform(inst, m);
-            Log.d(TAG, "Drone moved to root: " + x + ", " + y + ", " + z);
+            Log.d(TAG, "Drone moved to root: " + x + ", " + y + ", " + z + " scale=" + sc);
         } else {
             int[] entities = mAsset.getEntities();
             if (entities != null) {
                 for (int entity : entities) {
                     int inst = tm.getInstance(entity);
                     if (inst == 0) inst = tm.create(entity);
-                    float c = (float) Math.cos(heading), s = (float) Math.sin(heading);
-                    float[] m = new float[16];
-                    m[0] = c;   m[4] = 0; m[8]  = s;  m[12] = x;
-                    m[1] = 0;   m[5] = 1; m[9]  = 0;  m[13] = y;
-                    m[2] = -s;  m[6] = 0; m[10] = c;  m[14] = z;
-                    m[3] = 0;   m[7] = 0; m[11] = 0;  m[15] = 1;
                     tm.setTransform(inst, m);
                 }
-                Log.d(TAG, "Drone moved (fallback) to: " + x + ", " + y + ", " + z);
+                Log.d(TAG, "Drone moved (fallback) to: " + x + ", " + y + ", " + z + " scale=" + sc);
             }
         }
     }

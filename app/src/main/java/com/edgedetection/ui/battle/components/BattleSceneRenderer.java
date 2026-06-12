@@ -201,6 +201,15 @@ public class BattleSceneRenderer {
     }
 
     public float getModelRadius() {
-        return arRenderer != null ? arRenderer.getModelRadius() : 0.5f;
+        return arRenderer != null ? arRenderer.getEffectiveModelRadius() : 0.5f;
+    }
+
+    public void setModelScale(float targetSizeM) {
+        if (arRenderer == null) return;
+        float naturalRadius = arRenderer.getModelRadius();
+        if (naturalRadius > 0.001f) {
+            float scale = (targetSizeM / 2f) / naturalRadius;
+            arRenderer.setDroneScale(scale);
+        }
     }
 }

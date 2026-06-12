@@ -1,6 +1,7 @@
 package com.edgedetection.app;
 
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -157,6 +158,26 @@ public class MainActivity extends AppCompatActivity {
         if (menuId != -1 && bottomNav.getSelectedItemId() != menuId) {
             bottomNav.setSelectedItemId(menuId);
         }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                Fragment f = getSupportFragmentManager().findFragmentByTag("battle");
+                if (f instanceof BattleFragment && f.isVisible()) {
+                    BattleFragment bf = (BattleFragment) f;
+                    if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                        bf.fireBullet();
+                    } else {
+                        bf.toggleThermal();
+                    }
+                    return true;
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

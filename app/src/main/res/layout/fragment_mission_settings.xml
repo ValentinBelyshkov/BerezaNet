@@ -132,6 +132,70 @@
         </LinearLayout>
     </GridLayout>
 
+    <!-- Target size and bullet diameter -->
+    <GridLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:columnCount="2"
+        android:alignmentMode="alignMargins"
+        android:columnOrderPreserved="false"
+        android:layout_marginTop="4dp">
+
+        <!-- Target size -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_target_size_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Размер цели: 3.0 м"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
+
+            <SeekBar
+                android:id="@+id/sb_target_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="57"
+                android:progress="27"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <!-- Bullet diameter -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_bullet_diameter_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Диаметр пули: 30 см"
+                android:textSize="14sp"
+                android:textColor="#333333"/>
+
+            <SeekBar
+                android:id="@+id/sb_bullet_diameter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="60"
+                android:progress="20"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+    </GridLayout>
+
     <!-- Sound Effects -->
     <LinearLayout
         android:layout_width="match_parent"

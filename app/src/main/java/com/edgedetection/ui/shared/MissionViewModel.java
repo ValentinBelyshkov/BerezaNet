@@ -40,6 +40,8 @@ public class MissionViewModel extends AndroidViewModel {
     private static final String KEY_SPEED = "speedKmh";
     private static final String KEY_ALTITUDE = "altitudeMeters";
     private static final String KEY_SPAWN = "spawnIntervalSeconds";
+    private static final String KEY_TARGET_SIZE = "targetSizeM";
+    private static final String KEY_BULLET_DIAMETER = "bulletDiameterM";
 
     private static final int[] MISSION_COLORS = {
             0xFFFF0000, // Red
@@ -64,6 +66,8 @@ public class MissionViewModel extends AndroidViewModel {
         float savedAltitude = prefs.getFloat(KEY_ALTITUDE, 100f);
         float savedSpawn = prefs.getFloat(KEY_SPAWN, 90f);
         boolean savedSound = prefs.getBoolean("sound_enabled", false);
+        targetSizeLd.setValue(prefs.getFloat(KEY_TARGET_SIZE, 3.0f));
+        bulletDiameterLd.setValue(prefs.getFloat(KEY_BULLET_DIAMETER, 0.30f));
 
         this.missionData = new MutableLiveData<>(new Mission(
                 UUID.randomUUID().toString(), "Маршрут 1",
@@ -86,9 +90,16 @@ public class MissionViewModel extends AndroidViewModel {
         });
     }
 
+    // --- Target and bullet size settings ---
+    private final MutableLiveData<Float> targetSizeLd = new MutableLiveData<>();
+    private final MutableLiveData<Float> bulletDiameterLd = new MutableLiveData<>();
+
     // --- Realtime drone position for AR ---
     private final MutableLiveData<DronePosition> dronePosition = new MutableLiveData<>();
     private final MutableLiveData<Integer> hitDroneIndex = new MutableLiveData<>();
+
+    public LiveData<Float> getTargetSize() { return targetSizeLd; }
+    public LiveData<Float> getBulletDiameter() { return bulletDiameterLd; }
 
     public LiveData<DronePosition> getDronePosition() {
         return dronePosition;
@@ -175,6 +186,14 @@ public class MissionViewModel extends AndroidViewModel {
             boolean val = ((MissionIntent.SetSoundEnabled) intent).enabled;
             getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("sound_enabled", val).apply();
             update(m -> m.withSoundEnabled(val));
+        } else if (intent instanceof MissionIntent.SetTargetSize) {
+            float val = ((MissionIntent.SetTargetSize) intent).targetSizeM;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_TARGET_SIZE, val).apply();
+            targetSizeLd.setValue(val);
+        } else if (intent instanceof MissionIntent.SetBulletDiameter) {
+            float val = ((MissionIntent.SetBulletDiameter) intent).bulletDiameterM;
+            getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_BULLET_DIAMETER, val).apply();
+            bulletDiameterLd.setValue(val);
         }
     }
 

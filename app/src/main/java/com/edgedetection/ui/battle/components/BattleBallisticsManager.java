@@ -23,6 +23,16 @@ public class BattleBallisticsManager {
     private final FragmentActivity activity;
     private float bestMissDistance = Float.MAX_VALUE;
     private Runnable onHitCallback;
+    private float mBulletRadius = 0.15f;
+    private float mTargetRadius = -1f;
+
+    public void setBulletDiameterM(float diameterM) {
+        mBulletRadius = diameterM / 2f;
+    }
+
+    public void setTargetRadiusM(float radiusM) {
+        mTargetRadius = radiusM;
+    }
 
     public BattleBallisticsManager(Context context, FragmentActivity activity) {
         this.context = context;
@@ -58,7 +68,8 @@ public class BattleBallisticsManager {
             if (b.active && simulationActive) {
                 float d = b.distanceTo(lastDroneX, lastDroneY, lastDroneZ);
                 if (d < b.minDistToDrone) b.minDistToDrone = d;
-                if (d < droneRadius + 0.05f) {
+                float effectiveTarget = mTargetRadius > 0 ? mTargetRadius : droneRadius;
+                if (d < effectiveTarget + mBulletRadius) {
                     b.active = false;
                     b.hit = true;
                     Log.i(TAG, ">>> HIT DRONE! dist=" + d + "m");

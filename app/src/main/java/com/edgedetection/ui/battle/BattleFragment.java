@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Choreographer;
 import android.view.LayoutInflater;
@@ -123,6 +124,24 @@ public class BattleFragment extends Fragment {
     private double missionOriginLat, missionOriginLon, missionOriginAlt;
     private boolean hasMissionOrigin = false;
 
+    // --- Own simulation loop ---
+    private Handler simHandler;
+    private boolean isSimRunning = false;
+    private long lastSimFrameTime = 0;
+    private final List<SimDrone> simDrones = new ArrayList<>();
+    private java.util.List<com.edgedetection.domain.mission.Waypoint> mCachedWaypoints = null;
+
+    static class SimDrone {
+        int index;
+        double distanceMeters;
+        boolean visible = false;
+        boolean active = true;
+        int lives;
+        double lat, lon, alt;
+        double prevLat, prevLon;
+        double bearing = 0;
+    }
+
     private Choreographer choreographer;
     private long lastFrameNanos = 0;
     private boolean frameScheduled = false;
@@ -230,11 +249,16 @@ public class BattleFragment extends Fragment {
             Mission currentMission = missionVm.getMissionState().getValue();
             Mission.SimulationState state = currentMission != null ? currentMission.simState : Mission.SimulationState.IDLE;
             if (state == Mission.SimulationState.RUNNING) {
-                missionVm.dispatch(new MissionIntent.PauseSimulation());
-            } else if (state == Mission.SimulationState.PAUSED) {
-                missionVm.dispatch(new MissionIntent.StartSimulation());
+                stopSimulationLoop();
+                missionVm.dispatch(new MissionIntent.StopSimulation());
             } else {
+                if (currentMission == null || currentMission.waypoints.size() < 2) {
+                    Toast.makeText(requireContext(), "Нет маршрута (добавьте точки в Планировщике)", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                initBattleSimDrones(currentMission);
                 missionVm.dispatch(new MissionIntent.StartSimulation());
+                startSimulationLoop();
             }
         });
 
@@ -324,10 +348,7 @@ public class BattleFragment extends Fragment {
             if (mission != null && simulationButton != null) {
                 switch (mission.simState) {
                     case RUNNING:
-                        simulationButton.setText("Пауза симуляции");
-                        break;
-                    case PAUSED:
-                        simulationButton.setText("Продолжить");
+                        simulationButton.setText("Стоп симуляции");
                         break;
                     default:
                         simulationButton.setText("Старт симуляции");
@@ -347,6 +368,7 @@ public class BattleFragment extends Fragment {
                 sceneRenderer.setHasRelativePosition(false);
             }
             if (soundManager != null) soundManager.setEnabled(mission.soundEnabled);
+            mCachedWaypoints = mission.waypoints.size() >= 2 ? mission.waypoints : null;
         });
 
         missionVm.getDronePosition().observe(getViewLifecycleOwner(), pos -> {
@@ -354,6 +376,18 @@ public class BattleFragment extends Fragment {
                 this.currentDroneIndex = pos.index;
                 updateDronePosition(pos.lat, pos.lon, pos.alt, pos.heading);
             }
+        });
+
+        missionVm.getTargetSize().observe(getViewLifecycleOwner(), sizeM -> {
+            if (sizeM == null) return;
+            if (thermalOverlay != null) thermalOverlay.setTargetSizeM(sizeM);
+            if (sceneRenderer != null) sceneRenderer.setModelScale(sizeM);
+            if (ballisticsManager != null) ballisticsManager.setTargetRadiusM(sizeM / 2f);
+        });
+
+        missionVm.getBulletDiameter().observe(getViewLifecycleOwner(), diamM -> {
+            if (diamM == null) return;
+            if (ballisticsManager != null) ballisticsManager.setBulletDiameterM(diamM);
         });
     }
 
@@ -558,6 +592,19 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
             }
         }
 
+        // Thermal trajectory update (independent of drone visibility)
+        if (thermalActive && thermalOverlay != null && mCachedWaypoints != null) {
+            java.util.List<com.edgedetection.domain.mission.Waypoint> wps = mCachedWaypoints;
+            float[][] trajPts = new float[wps.size()][];
+            for (int i = 0; i < wps.size(); i++) {
+                com.edgedetection.domain.mission.Waypoint wp = wps.get(i);
+                double[] enu = com.edgedetection.domain.geo.GeoUtils.ecefToEnu(
+                        refLat, refLon, refAlt, wp.latitude, wp.longitude, wp.altitudeAmsl);
+                trajPts[i] = com.edgedetection.domain.geo.GeoUtils.enuToFilament(enu);
+            }
+            thermalOverlay.setTrajectory(trajPts);
+        }
+
         // Thermal overlay update
         if (thermalActive && thermalOverlay != null && sceneRenderer.hasRelativePosition()) {
             float ldx = sceneRenderer.getLastDroneX();
@@ -714,6 +761,173 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
         this.hasMissionOrigin = true;
     }
 
+    public void fireBullet() {
+        if (ballisticsManager != null) {
+            ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
+        }
+    }
+
+    public void toggleThermal() {
+        if (thermalOverlay == null || thermalButton == null) return;
+        thermalActive = !thermalActive;
+        thermalOverlay.setVisibility(thermalActive ? View.VISIBLE : View.GONE);
+        thermalButton.setBackgroundColor(thermalActive ? 0xCC004400 : 0xCC001A00);
+        thermalButton.setText(thermalActive ? "Тепловизор: ВКЛ" : "Тепловизор");
+    }
+
+    // --- Own simulation loop ---
+
+    private void initBattleSimDrones(Mission m) {
+        simDrones.clear();
+        com.edgedetection.domain.mission.Waypoint start = m.waypoints.get(0);
+        double speedMps = m.speedKmh * 1000.0 / 3600.0;
+        double intervalMeters = speedMps * m.spawnIntervalSeconds;
+        double baseAlt = m.originAltitudeAmsl != null ? m.originAltitudeAmsl : start.altitudeAmsl;
+        for (int i = 0; i < m.droneCount; i++) {
+            SimDrone d = new SimDrone();
+            d.index = i;
+            d.distanceMeters = -i * intervalMeters;
+            d.visible = false;
+            d.active = true;
+            d.lives = m.maxLives;
+            d.lat = start.latitude;
+            d.lon = start.longitude;
+            d.prevLat = start.latitude;
+            d.prevLon = start.longitude;
+            d.alt = baseAlt + m.altitudeMeters;
+            d.bearing = 0;
+            simDrones.add(d);
+        }
+    }
+
+    private void startSimulationLoop() {
+        if (simHandler == null) {
+            simHandler = new Handler(Looper.getMainLooper());
+        }
+        isSimRunning = true;
+        lastSimFrameTime = SystemClock.elapsedRealtime();
+        simHandler.post(simRunnable);
+    }
+
+    private void stopSimulationLoop() {
+        isSimRunning = false;
+        if (simHandler != null) simHandler.removeCallbacks(simRunnable);
+        simDrones.clear();
+        hasDronePosition = false;
+    }
+
+    private final Runnable simRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isSimRunning || !isAdded() || isDetached()) return;
+            Mission mission = missionVm.getMissionState().getValue();
+            if (mission != null && mission.simState == Mission.SimulationState.RUNNING) {
+                simulationTick(mission);
+            }
+            simHandler.postDelayed(this, 33);
+        }
+    };
+
+    private void simulationTick(Mission mission) {
+        long now = SystemClock.elapsedRealtime();
+        double dt = (now - lastSimFrameTime) / 1000.0;
+        lastSimFrameTime = now;
+
+        if (mission.waypoints.size() < 2) return;
+
+        double speedMps = mission.speedKmh * 1000.0 / 3600.0;
+        double totalLen = simCalculateRouteLength(mission.waypoints);
+
+        for (SimDrone d : simDrones) {
+            if (!d.active) continue;
+            d.prevLat = d.lat;
+            d.prevLon = d.lon;
+            d.distanceMeters += speedMps * dt;
+
+            if (d.distanceMeters < 0) {
+                d.visible = false;
+            } else if (d.distanceMeters >= totalLen) {
+                d.active = false;
+                d.visible = false;
+            } else {
+                d.visible = true;
+                double[] pos = simInterpolatePosition(mission.waypoints, d.distanceMeters);
+                d.lat = pos[0];
+                d.lon = pos[1];
+                double baseAlt = mission.originAltitudeAmsl != null ? mission.originAltitudeAmsl : mission.waypoints.get(0).altitudeAmsl;
+                d.alt = baseAlt + mission.altitudeMeters;
+                double dx = (d.lon - d.prevLon) * Math.cos(Math.toRadians(d.lat)) * 111320.0;
+                double dy = (d.lat - d.prevLat) * 110540.0;
+                if (Math.hypot(dx, dy) > 1.0) {
+                    d.bearing = simCalculateBearing(d.prevLat, d.prevLon, d.lat, d.lon);
+                }
+            }
+        }
+
+        if (!simDrones.isEmpty()) {
+            SimDrone d = simDrones.get(0);
+            if (d.active) {
+                missionVm.setDronePosition(new com.edgedetection.domain.mission.DronePosition(
+                        d.index, d.lat, d.lon, d.alt,
+                        (float) d.bearing, d.visible
+                ));
+            }
+        }
+
+        boolean anyActive = false;
+        for (SimDrone d : simDrones) {
+            if (d.active) { anyActive = true; break; }
+        }
+        if (!anyActive) {
+            stopSimulationLoop();
+            missionVm.dispatch(new MissionIntent.StopSimulation());
+        }
+    }
+
+    private double simCalculateRouteLength(List<com.edgedetection.domain.mission.Waypoint> wps) {
+        double len = 0;
+        for (int i = 1; i < wps.size(); i++) {
+            com.edgedetection.domain.mission.Waypoint a = wps.get(i - 1);
+            com.edgedetection.domain.mission.Waypoint b = wps.get(i);
+            double dx = (b.longitude - a.longitude) * Math.cos(Math.toRadians(a.latitude)) * 111320;
+            double dy = (b.latitude - a.latitude) * 110540;
+            len += Math.sqrt(dx * dx + dy * dy);
+        }
+        return len;
+    }
+
+    private double[] simInterpolatePosition(List<com.edgedetection.domain.mission.Waypoint> wps, double dist) {
+        double acc = 0;
+        for (int i = 1; i < wps.size(); i++) {
+            com.edgedetection.domain.mission.Waypoint a = wps.get(i - 1);
+            com.edgedetection.domain.mission.Waypoint b = wps.get(i);
+            double dx = (b.longitude - a.longitude) * Math.cos(Math.toRadians(a.latitude)) * 111320;
+            double dy = (b.latitude - a.latitude) * 110540;
+            double seg = Math.sqrt(dx * dx + dy * dy);
+            if (acc + seg >= dist) {
+                double t = (dist - acc) / seg;
+                return new double[]{
+                        a.latitude + (b.latitude - a.latitude) * t,
+                        a.longitude + (b.longitude - a.longitude) * t,
+                        a.altitudeAmsl + (b.altitudeAmsl - a.altitudeAmsl) * t
+                };
+            }
+            acc += seg;
+        }
+        com.edgedetection.domain.mission.Waypoint last = wps.get(wps.size() - 1);
+        return new double[]{last.latitude, last.longitude, last.altitudeAmsl};
+    }
+
+    private double simCalculateBearing(double lat1, double lon1, double lat2, double lon2) {
+        double lat1Rad = Math.toRadians(lat1);
+        double lat2Rad = Math.toRadians(lat2);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double y = Math.sin(dLon) * Math.cos(lat2Rad);
+        double x = Math.cos(lat1Rad) * Math.sin(lat2Rad)
+                - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+        return (Math.toDegrees(Math.atan2(y, x)) + 360.0) % 360.0;
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -733,6 +947,7 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
     public void onPause() {
         super.onPause();
         lastFrameNanos = 0;
+        stopSimulationLoop();
         if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) cameraManager.getCurrentSource().getValue().stop();
         if (glView != null) glView.onPause();
         if (sceneRenderer != null) sceneRenderer.onPause();
@@ -746,6 +961,7 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        stopSimulationLoop();
         if (soundManager != null) { soundManager.release(); soundManager = null; }
         ballisticsManager.clear();
         if (choreographer != null) choreographer.removeFrameCallback(frameCallback);
