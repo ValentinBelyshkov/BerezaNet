@@ -86,11 +86,12 @@ public class BattleSceneRenderer {
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
                     (float) Math.toRadians(droneHeading) + (float) Math.PI);
-        } else if (hasRelativePosition) {
+        } else if (simulationActive && hasRelativePosition) {
             arRenderer.setModelVisible(true);
             arRenderer.setDronePosition(lastDroneX, lastDroneY, lastDroneZ,
                     (float) Math.toRadians(droneHeading) + (float) Math.PI);
         } else {
+            hasRelativePosition = false;
             arRenderer.setModelVisible(false);
         }
     }
