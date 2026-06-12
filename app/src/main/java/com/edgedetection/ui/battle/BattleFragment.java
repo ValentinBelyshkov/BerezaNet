@@ -443,9 +443,18 @@ public class BattleFragment extends Fragment {
 
     private void toggleCardinalCubes() {
         cardinalCubesVisible = !cardinalCubesVisible;
-        if (sceneRenderer != null) {
-            sceneRenderer.setCardinalCubesVisible(cardinalCubesVisible);
+        if (sceneRenderer == null) {
+            cardinalCubesVisible = false;
+            cardinalCubesButton.setText("Стороны света: Выкл");
+            return;
         }
+        if (!sceneRenderer.isCardinalCubesLoaded()) {
+            cardinalCubesVisible = false;
+            cardinalCubesButton.setText("Стороны света: Выкл");
+            Toast.makeText(requireContext(), "Кубы сторон света не загрузились", Toast.LENGTH_LONG).show();
+            return;
+        }
+        sceneRenderer.setCardinalCubesVisible(cardinalCubesVisible);
         cardinalCubesButton.setText(cardinalCubesVisible ? "Стороны света: Вкл" : "Стороны света: Выкл");
         if (cardinalCubesVisible) {
             Toast.makeText(requireContext(), "Синий — север, красный — восток, жёлтый — юг, зелёный — запад", Toast.LENGTH_LONG).show();

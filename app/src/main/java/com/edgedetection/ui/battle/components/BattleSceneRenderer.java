@@ -197,6 +197,10 @@ public class BattleSceneRenderer {
         }
     }
 
+    public boolean isCardinalCubesLoaded() {
+        return arRenderer != null && arRenderer.isCardinalCubesLoaded();
+    }
+
     public void updateCardinalCubes(float yawRadians) {
         if (arRenderer != null) {
             arRenderer.updateCardinalCubes(yawRadians);

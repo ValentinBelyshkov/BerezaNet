@@ -98,6 +98,7 @@ public class Filament3DRenderer {
     private FilamentAsset mCardinalCubesAsset;
     private int[] mCardinalCubesEntities = new int[0];
     private boolean mCardinalCubesVisible = false;
+    private boolean mCardinalCubesLoaded = false;
     private boolean mModelLoaded = false;
     private Skybox mSkybox;
     private Texture mSkyboxTexture;
@@ -294,6 +295,7 @@ public class Filament3DRenderer {
 
             mCardinalCubesAsset = mAssetLoader.createAsset(ByteBuffer.wrap(bytes));
             if (mCardinalCubesAsset == null) {
+                mCardinalCubesLoaded = false;
                 Log.e(TAG, "Failed to load cardinal cubes: " + assetPath);
                 return;
             }
@@ -305,9 +307,11 @@ public class Filament3DRenderer {
                 mScene.addEntity(entity);
             }
             mCardinalCubesVisible = false;
+            mCardinalCubesLoaded = true;
             setCardinalCubesVisible(false);
             Log.i(TAG, "Cardinal cubes loaded: " + assetPath);
         } catch (Exception e) {
+            mCardinalCubesLoaded = false;
             Log.e(TAG, "Cardinal cubes load error", e);
         } finally {
             if (stream != null) {
@@ -327,6 +331,10 @@ public class Filament3DRenderer {
                 mScene.removeEntity(entity);
             }
         }
+    }
+
+    public boolean isCardinalCubesLoaded() {
+        return mCardinalCubesLoaded;
     }
 
     public void updateCardinalCubes(float yawRadians) {
