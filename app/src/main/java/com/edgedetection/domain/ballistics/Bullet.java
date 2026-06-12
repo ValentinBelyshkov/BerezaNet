@@ -10,9 +10,10 @@ public class Bullet {
     public boolean active = true;
     public boolean hit = false;
     public long spawnTime;
+    public float minDistToDrone = Float.MAX_VALUE;
 
     // 7.62×39mm-like параметры
-    public static final float SPEED_MPS = 700f * 1000f / 3600f; // 194.44 м/с
+    public static final float SPEED_MPS = 700f; // 700 м/с
     public static final float DRAG_COEF = 0.295f;
     public static final float AREA_M2  = 0.000047f; // сечение ~7.62 мм
     public static final float MASS_KG  = 0.0079f;

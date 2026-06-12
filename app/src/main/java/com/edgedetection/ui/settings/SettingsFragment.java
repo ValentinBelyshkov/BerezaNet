@@ -9,6 +9,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -22,6 +23,7 @@ public class SettingsFragment extends Fragment {
     private MissionViewModel missionVm;
     private TextView tvLives, tvSpeed, tvAltitude, tvSpawnInterval;
     private SeekBar sbLives, sbSpeed, sbAltitude, sbSpawnInterval;
+    private SwitchCompat swSoundEnabled;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -48,6 +50,7 @@ public class SettingsFragment extends Fragment {
         sbSpeed = view.findViewById(R.id.sb_speed);
         sbAltitude = view.findViewById(R.id.sb_altitude);
         sbSpawnInterval = view.findViewById(R.id.sb_spawn_interval);
+        swSoundEnabled = view.findViewById(R.id.sw_sound_enabled);
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::updateUi);
 
@@ -86,6 +89,10 @@ public class SettingsFragment extends Fragment {
                 }
             }
         });
+
+        swSoundEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            missionVm.dispatch(new MissionIntent.SetSoundEnabled(isChecked));
+        });
     }
 
     private void updateUi(Mission mission) {
@@ -102,6 +109,12 @@ public class SettingsFragment extends Fragment {
 
         tvSpawnInterval.setText("Интервал появления (сек): " + (int) mission.spawnIntervalSeconds);
         sbSpawnInterval.setProgress((int) mission.spawnIntervalSeconds);
+
+        swSoundEnabled.setOnCheckedChangeListener(null);
+        swSoundEnabled.setChecked(mission.soundEnabled);
+        swSoundEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            missionVm.dispatch(new MissionIntent.SetSoundEnabled(isChecked));
+        });
     }
 
     private abstract static class SimpleOnSeekBarChangeListener implements SeekBar.OnSeekBarChangeListener {

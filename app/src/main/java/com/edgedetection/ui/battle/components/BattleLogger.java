@@ -13,62 +13,87 @@ public class BattleLogger {
     private static final String TAG = "BattleLogger";
     private static final float EYE_HEIGHT = 1.6f;
 
+    // Вспомогательные методы для безопасной записи чисел
+    private static double safeDouble(double value) {
+        return (Double.isNaN(value) || Double.isInfinite(value)) ? 0.0 : value;
+    }
+
+    private static double safeDouble(float value) {
+        return (Float.isNaN(value) || Float.isInfinite(value)) ? 0.0 : value;
+    }
+
+    private static float safeFloat(float value) {
+        return (Float.isNaN(value) || Float.isInfinite(value)) ? 0.0f : value;
+    }
+
     public static void logState(float fx, float fy, float fz, float ux, float uy, float uz,
-                         double refLat, double refLon, double refAlt,
-                         double[] enu, float lastDroneX, float lastDroneY, float lastDroneZ,
-                         double droneLat, double droneLon, double droneAlt,
-                         float[] lastRotationVector, float[] rotationMatrix,
-                         Filament3DRenderer arRenderer, boolean droneVisible) {
+                                double refLat, double refLon, double refAlt,
+                                double[] enu, double distanceM,
+                                float lastDroneX, float lastDroneY, float lastDroneZ,
+                                double droneLat, double droneLon, double droneAlt,
+                                float[] lastRotationVector, float[] rotationMatrix,
+                                Filament3DRenderer arRenderer, boolean droneVisible,
+                                float bestMissDistM) {
         try {
             JSONObject root = new JSONObject();
             root.put("timestamp", System.currentTimeMillis() / 1000);
+            root.put("distance_m", Math.round(safeDouble(distanceM)));
+            if (bestMissDistM >= 0) root.put("best_miss_m", Math.round(safeDouble(bestMissDistM)));
 
             JSONObject user = new JSONObject();
             JSONObject userGps = new JSONObject();
-            userGps.put("lat", refLat);
-            userGps.put("lon", refLon);
-            userGps.put("alt", refAlt);
+            userGps.put("lat", safeDouble(refLat));
+            userGps.put("lon", safeDouble(refLon));
+            userGps.put("alt", safeDouble(refAlt));
             user.put("gps", userGps);
 
             JSONObject sensors = new JSONObject();
             JSONArray rv = new JSONArray();
-            for (float v : lastRotationVector) rv.put(v);
+            if (lastRotationVector != null) {
+                for (float v : lastRotationVector) rv.put(safeDouble(v));
+            }
             sensors.put("rotationVector", rv);
-            
+
             float[] standardOrientation = new float[3];
-            SensorManager.getOrientation(rotationMatrix, standardOrientation);
-            sensors.put("azimuth", Math.toDegrees(standardOrientation[0]));
-            sensors.put("pitch", Math.toDegrees(standardOrientation[1]));
-            sensors.put("roll", Math.toDegrees(standardOrientation[2]));
+            if (rotationMatrix != null) {
+                SensorManager.getOrientation(rotationMatrix, standardOrientation);
+            }
+            sensors.put("azimuth", Math.toDegrees(safeDouble(standardOrientation[0])));
+            sensors.put("pitch", Math.toDegrees(safeDouble(standardOrientation[1])));
+            sensors.put("roll", Math.toDegrees(safeDouble(standardOrientation[2])));
             user.put("sensors", sensors);
             root.put("user", user);
 
             JSONObject drone = new JSONObject();
             JSONObject droneGps = new JSONObject();
-            droneGps.put("lat", droneLat);
-            droneGps.put("lon", droneLon);
-            droneGps.put("alt", droneAlt);
+            droneGps.put("lat", safeDouble(droneLat));
+            droneGps.put("lon", safeDouble(droneLon));
+            droneGps.put("alt", safeDouble(droneAlt));
             drone.put("gps", droneGps);
             root.put("drone", drone);
 
             JSONObject enuObj = new JSONObject();
             JSONObject origin = new JSONObject();
-            origin.put("lat", refLat);
-            origin.put("lon", refLon);
+            origin.put("lat", safeDouble(refLat));
+            origin.put("lon", safeDouble(refLon));
             enuObj.put("origin", origin);
+
             JSONObject droneEnu = new JSONObject();
-            droneEnu.put("E", enu[0]);
-            droneEnu.put("N", enu[1]);
-            droneEnu.put("U", enu[2]);
+            if (enu != null && enu.length >= 3) {
+                droneEnu.put("E", safeDouble(enu[0]));
+                droneEnu.put("N", safeDouble(enu[1]));
+                droneEnu.put("U", safeDouble(enu[2]));
+            }
             enuObj.put("drone", droneEnu);
             root.put("enu", enuObj);
 
             JSONObject engine = new JSONObject();
             engine.put("convention", "Y-up, right-handed");
+
             JSONObject dronePos = new JSONObject();
-            dronePos.put("x", lastDroneX);
-            dronePos.put("y", lastDroneY);
-            dronePos.put("z", lastDroneZ);
+            dronePos.put("x", safeDouble(lastDroneX));
+            dronePos.put("y", safeDouble(lastDroneY));
+            dronePos.put("z", safeDouble(lastDroneZ));
             engine.put("dronePos", dronePos);
 
             JSONObject camera = new JSONObject();
@@ -79,15 +104,15 @@ public class BattleLogger {
             camera.put("pos", camPos);
 
             JSONObject forward = new JSONObject();
-            forward.put("x", fx);
-            forward.put("y", fy);
-            forward.put("z", fz);
+            forward.put("x", safeDouble(fx));
+            forward.put("y", safeDouble(fy));
+            forward.put("z", safeDouble(fz));
             camera.put("forward", forward);
 
             JSONObject up = new JSONObject();
-            up.put("x", ux);
-            up.put("y", uy);
-            up.put("z", uz);
+            up.put("x", safeDouble(ux));
+            up.put("y", safeDouble(uy));
+            up.put("z", safeDouble(uz));
             camera.put("up", up);
 
             // Right vector: forward x up
@@ -95,32 +120,38 @@ public class BattleLogger {
             float ry = fz * ux - fx * uz;
             float rz = fx * uy - fy * ux;
             JSONObject right = new JSONObject();
-            right.put("x", rx);
-            right.put("y", ry);
-            right.put("z", rz);
+            right.put("x", safeDouble(rx));
+            right.put("y", safeDouble(ry));
+            right.put("z", safeDouble(rz));
             camera.put("right", right);
             engine.put("camera", camera);
 
             double[] viewMat = new double[16];
             double[] projMat = new double[16];
-            arRenderer.getCamera().getViewMatrix(viewMat);
-            arRenderer.getCamera().getProjectionMatrix(projMat);
+            if (arRenderer != null && arRenderer.getCamera() != null) {
+                arRenderer.getCamera().getViewMatrix(viewMat);
+                arRenderer.getCamera().getProjectionMatrix(projMat);
+            }
+
             JSONArray viewMatArr = new JSONArray();
-            for (double v : viewMat) viewMatArr.put(v);
+            for (double v : viewMat) viewMatArr.put(safeDouble(v));
             engine.put("viewMatrix", viewMatArr);
+
             JSONArray projMatArr = new JSONArray();
-            for (double v : projMat) projMatArr.put(v);
+            for (double v : projMat) projMatArr.put(safeDouble(v));
             engine.put("projectionMatrix", projMatArr);
 
-            float[] modelMat = arRenderer.getDroneModelMatrix();
+            float[] modelMat = arRenderer != null ? arRenderer.getDroneModelMatrix() : null;
             JSONArray modelMatArr = new JSONArray();
-            for (float v : modelMat) modelMatArr.put(v);
+            if (modelMat != null) {
+                for (float v : modelMat) modelMatArr.put(safeDouble(v));
+            }
             engine.put("modelMatrixDrone", modelMatArr);
             root.put("engine", engine);
 
             JSONObject screen = new JSONObject();
             // Calculate NDC
-            float[] v_world = {lastDroneX, lastDroneY, lastDroneZ, 1.0f};
+            float[] v_world = {safeFloat(lastDroneX), safeFloat(lastDroneY), safeFloat(lastDroneZ), 1.0f};
             float[] v_view = new float[4];
             for (int i = 0; i < 4; i++) {
                 v_view[i] = 0;
@@ -128,6 +159,7 @@ public class BattleLogger {
                     v_view[i] += (float)viewMat[j * 4 + i] * v_world[j];
                 }
             }
+
             float[] v_clip = new float[4];
             for (int i = 0; i < 4; i++) {
                 v_clip[i] = 0;
@@ -135,25 +167,29 @@ public class BattleLogger {
                     v_clip[i] += (float)projMat[j * 4 + i] * v_view[j];
                 }
             }
+
             JSONObject ndc = new JSONObject();
-            if (v_clip[3] != 0) {
-                ndc.put("x", v_clip[0] / v_clip[3]);
-                ndc.put("y", v_clip[1] / v_clip[3]);
-                ndc.put("z", v_clip[2] / v_clip[3]);
+            if (v_clip[3] != 0 && !Float.isNaN(v_clip[3])) {
+                ndc.put("x", safeDouble(v_clip[0] / v_clip[3]));
+                ndc.put("y", safeDouble(v_clip[1] / v_clip[3]));
+                ndc.put("z", safeDouble(v_clip[2] / v_clip[3]));
             } else {
-                ndc.put("x", 0); ndc.put("y", 0); ndc.put("z", 0);
+                ndc.put("x", 0);
+                ndc.put("y", 0);
+                ndc.put("z", 0);
             }
             screen.put("droneNDC", ndc);
 
-            Viewport vp = arRenderer.getViewport();
+            Viewport vp = arRenderer != null ? arRenderer.getViewport() : null;
             JSONObject pixel = new JSONObject();
-            if (v_clip[3] != 0) {
+            if (vp != null && v_clip[3] != 0 && !Float.isNaN(v_clip[3])) {
                 float nx = v_clip[0] / v_clip[3];
                 float ny = v_clip[1] / v_clip[3];
-                pixel.put("x", (nx * 0.5f + 0.5f) * vp.width);
-                pixel.put("y", (1.0f - (ny * 0.5f + 0.5f)) * vp.height);
+                pixel.put("x", safeDouble((nx * 0.5f + 0.5f) * vp.width));
+                pixel.put("y", safeDouble((1.0f - (ny * 0.5f + 0.5f)) * vp.height));
             } else {
-                pixel.put("x", 0); pixel.put("y", 0);
+                pixel.put("x", 0);
+                pixel.put("y", 0);
             }
             screen.put("dronePixel", pixel);
             screen.put("visible", droneVisible);

@@ -54,6 +54,7 @@ public class Filament3DRenderer {
     private float mAspectRatio = 1.0f;
     private static final float SKYBOX_SCALE = 100.0f;
     private Choreographer mChoreographer;
+
     private final Choreographer.FrameCallback mFrameCallback = new Choreographer.FrameCallback() {
         @Override
         public void doFrame(long frameTimeNanos) {
@@ -245,11 +246,28 @@ public class Filament3DRenderer {
 
             mResourceLoader.loadResources(mAsset);
 
-            int[] entities = mAsset.getEntities();
-            if (entities != null) {
-                for (int entity : entities) {
+            // ✅ ДИАГНОСТИКА: Проверяем структуру модели
+            int root = mAsset.getRoot();
+            int[] allEntities = mAsset.getEntities();
+            int[] renderables = mAsset.getRenderableEntities();
+
+            Log.w(TAG, "=== MODEL STRUCTURE ===");
+            Log.w(TAG, "Root entity: " + root);
+            Log.w(TAG, "Total entities: " + (allEntities != null ? allEntities.length : 0));
+            Log.w(TAG, "Renderable entities: " + (renderables != null ? renderables.length : 0));
+
+            if (renderables != null) {
+                for (int i = 0; i < renderables.length; i++) {
+                    Log.w(TAG, "Renderable[" + i + "]: " + renderables[i]);
+                }
+            }
+
+            // ✅ ИСПРАВЛЕНО: Добавляем все entities (как было), но логируем
+            if (allEntities != null) {
+                for (int entity : allEntities) {
                     mScene.addEntity(entity);
                 }
+                Log.i(TAG, "Added " + allEntities.length + " entities to scene");
             }
 
             mModelCenter = mAsset.getBoundingBox().getCenter();
@@ -282,19 +300,27 @@ public class Filament3DRenderer {
 
     public void setModelVisible(boolean visible) {
         if (mAsset == null || mDestroyed || mEngineDestroyed) return;
-        int[] entities = mAsset.getEntities();
-        if (entities != null) {
-            for (int entity : entities) {
+
+        // ✅ ИСПРАВЛЕНО: Управляем видимостью через root
+        int root = mAsset.getRoot();
+        if (root != 0) {
+            if (visible) {
+                mScene.addEntity(root);
+            } else {
+                mScene.removeEntity(root);
+            }
+        } else {
+            int[] entities = mAsset.getEntities();
+            if (entities != null && entities.length > 0) {
                 if (visible) {
-                    mScene.addEntity(entity);
+                    mScene.addEntity(entities[0]);
                 } else {
-                    mScene.removeEntity(entity);
+                    mScene.removeEntity(entities[0]);
                 }
             }
         }
     }
 
-    /** Доступ к камере для Fragment */
     public Camera getCamera() {
         return mCamera;
     }
@@ -307,7 +333,6 @@ public class Filament3DRenderer {
         return mModelRadius;
     }
 
-    /** Цветной Skybox (для теста без HDRI) */
     public void setSkyboxColor(float r, float g, float b, float a) {
         if (mDestroyed || mEngineDestroyed) return;
 
@@ -323,10 +348,6 @@ public class Filament3DRenderer {
         mScene.setSkybox(mSkybox);
     }
 
-    /**
-     * Заглушка для HDRI из drawable.
-     * Filament НЕ умеет equirectangular JPG напрямую — только KTX cubemap!
-     */
     public void setSkyboxFromDrawable(int drawableResId) {
         if (mDestroyed || mEngineDestroyed) return;
 
@@ -346,7 +367,6 @@ public class Filament3DRenderer {
             Log.w(TAG, "LOAD:    loadSkyboxKtx(\"skybox/output_hdri.ktx\")");
             Log.w(TAG, "============================================================");
 
-            // Временный фон похожий на твою HDRI
             setSkyboxColor(0.55f, 0.20f, 0.15f, 1.0f);
 
         } catch (Exception e) {
@@ -354,11 +374,6 @@ public class Filament3DRenderer {
         }
     }
 
-    /**
-     * SpringArm камера: летает по окружности ВОКРУГ модели.
-     * yaw=0   -> камера спереди (смотрит на морду)
-     * yaw=PI  -> камера сзади (смотрит на жопу)
-     */
     public void updateCameraSpringArm(float yaw, float pitch) {
         if (mDestroyed || mEngineDestroyed) return;
 
@@ -370,7 +385,6 @@ public class Filament3DRenderer {
         float cosY = (float) Math.cos(yaw);
         float sinY = (float) Math.sin(yaw);
 
-        // Позиция камеры на сфере вокруг центра
         float camX = distance * cosP * sinY;
         float camY = 0.5f + distance * sinP;
         float camZ = -distance * cosP * cosY;
@@ -410,6 +424,7 @@ public class Filament3DRenderer {
             stopChoreographer();
         }
     }
+
     public void loadSkyboxModel(String assetPath) {
         if (mDestroyed || mEngineDestroyed) return;
 
@@ -434,10 +449,16 @@ public class Filament3DRenderer {
 
             mResourceLoader.loadResources(mSkyboxAsset);
 
-            int[] entities = mSkyboxAsset.getEntities();
-            if (entities != null) {
-                for (int entity : entities) {
-                    mScene.addEntity(entity);
+            // ✅ ИСПРАВЛЕНО: Добавляем ТОЛЬКО root entity
+            int root = mSkyboxAsset.getRoot();
+            if (root != 0) {
+                mScene.addEntity(root);
+                Log.i(TAG, "Skybox root entity added to scene: " + root);
+            } else {
+                int[] entities = mSkyboxAsset.getEntities();
+                if (entities != null && entities.length > 0) {
+                    mScene.addEntity(entities[0]);
+                    Log.w(TAG, "Skybox root is 0, using first entity: " + entities[0]);
                 }
             }
 
@@ -470,18 +491,11 @@ public class Filament3DRenderer {
         }
     }
 
-    /**
-     * Environment lighting без KTX — через Spherical Harmonics (uniform white ambient)
-     * + яркий directional light. Дрон будет освещён, unlit-сфера неба не пострадает.
-     */
     public void setupEnvironmentLighting() {
         if (mDestroyed || mEngineDestroyed) return;
 
-        // 1. IndirectLight (ambient) — белый SH, 3 bands
         float[] sh = new float[27];
-        // Band 0 (L00) — uniform white
         sh[0]  = 0.282095f; sh[1]  = 0.282095f; sh[2]  = 0.282095f;
-        // Bands 1-2 оставляем 0 (new float[27] уже заполнен нулями)
 
         IndirectLight ibl = new IndirectLight.Builder()
                 .irradiance(3, sh)
@@ -490,7 +504,6 @@ public class Filament3DRenderer {
 
         mScene.setIndirectLight(ibl);
 
-        // 2. Дополнительный яркий directional light с другой стороны
         int light2 = EntityManager.get().create();
         new LightManager.Builder(LightManager.Type.DIRECTIONAL)
                 .color(1.0f, 0.95f, 0.9f)
@@ -500,7 +513,6 @@ public class Filament3DRenderer {
                 .build(mEngine, light2);
         mScene.addEntity(light2);
 
-        // 3. Поднимаем exposure чтобы всё было ярче
         mCamera.setExposure(16.0f, 1.0f / 60.0f, 100.0f);
 
         Log.i(TAG, "Environment lighting setup complete");
@@ -519,19 +531,27 @@ public class Filament3DRenderer {
         float S = SKYBOX_SCALE;
 
         float[] matrix = new float[16];
-        // Column-major: RotateY(angle) * Scale(S)
         matrix[0]  = S * c;   matrix[4]  = 0;       matrix[8]  = S * s;   matrix[12] = 0;
         matrix[1]  = 0;       matrix[5]  = S;       matrix[9]  = 0;       matrix[13] = 0;
         matrix[2]  = -S * s;  matrix[6]  = 0;       matrix[10] = S * c;   matrix[14] = 0;
         matrix[3]  = 0;       matrix[7]  = 0;       matrix[11] = 0;       matrix[15] = 1;
 
         TransformManager tm = mEngine.getTransformManager();
-        int[] entities = mSkyboxAsset.getEntities();
-        if (entities != null) {
-            for (int entity : entities) {
-                int inst = tm.getInstance(entity);
+
+        // ✅ ИСПРАВЛЕНО: Применяем трансформацию ТОЛЬКО к root
+        int root = mSkyboxAsset.getRoot();
+        if (root != 0) {
+            int inst = tm.getInstance(root);
+            if (inst == 0) {
+                inst = tm.create(root);
+            }
+            tm.setTransform(inst, matrix);
+        } else {
+            int[] entities = mSkyboxAsset.getEntities();
+            if (entities != null && entities.length > 0) {
+                int inst = tm.getInstance(entities[0]);
                 if (inst == 0) {
-                    inst = tm.create(entity);
+                    inst = tm.create(entities[0]);
                 }
                 tm.setTransform(inst, matrix);
             }
@@ -562,7 +582,6 @@ public class Filament3DRenderer {
         }
     }
 
-    /** Перемещает дрона в мировые координаты Filament + yaw (радианы, 0=Север, по часовой) */
     public void setDronePosition(float x, float y, float z, float heading) {
         if (mDestroyed || mEngineDestroyed || mAsset == null) return;
         TransformManager tm = mEngine.getTransformManager();
@@ -608,19 +627,10 @@ public class Filament3DRenderer {
             if (inst != 0) {
                 tm.getTransform(inst, matrix);
             }
-        } else {
-            int[] entities = mAsset.getEntities();
-            if (entities != null && entities.length > 0) {
-                int inst = tm.getInstance(entities[0]);
-                if (inst != 0) {
-                    tm.getTransform(inst, matrix);
-                }
-            }
         }
         return matrix;
     }
 
-    /** First-person камера AR: глаза в (0,eyeHeight,0), смотрит вдоль forward, up задаёт вертикаль кадра */
     public void updateCameraAR(float eyeHeight,
                                float forwardX, float forwardY, float forwardZ,
                                float upX, float upY, float upZ) {
@@ -635,14 +645,12 @@ public class Filament3DRenderer {
 
     private double mFarPlane = 1000.0;
 
-    // обновить метод
     public void setFarPlane(double far) {
         mFarPlane = far;
         if (mDestroyed || mEngineDestroyed) return;
         mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, far, Camera.Fov.VERTICAL);
     }
 
-    // добавить геттер
     public double getFarPlane() {
         return mFarPlane;
     }
@@ -650,6 +658,7 @@ public class Filament3DRenderer {
     public float getFovDegrees() { return mFovDegrees; }
     public float getAspectRatio() { return mAspectRatio; }
     public Viewport getViewport() { return mView.getViewport(); }
+
     public void destroy() {
         if (mDestroyed) return;
         mDestroyed = true;
@@ -676,11 +685,10 @@ public class Filament3DRenderer {
 
             if (mAsset != null) {
                 try {
-                    int[] entities = mAsset.getEntities();
-                    if (entities != null) {
-                        for (int entity : entities) {
-                            mScene.removeEntity(entity);
-                        }
+                    // ✅ ИСПРАВЛЕНО: Удаляем только root
+                    int root = mAsset.getRoot();
+                    if (root != 0) {
+                        mScene.removeEntity(root);
                     }
                     mAssetLoader.destroyAsset(mAsset);
                 } catch (Exception e) {
@@ -706,11 +714,10 @@ public class Filament3DRenderer {
             }
             if (mSkyboxAsset != null) {
                 try {
-                    int[] entities = mSkyboxAsset.getEntities();
-                    if (entities != null) {
-                        for (int entity : entities) {
-                            mScene.removeEntity(entity);
-                        }
+                    // ✅ ИСПРАВЛЕНО: Удаляем только root
+                    int root = mSkyboxAsset.getRoot();
+                    if (root != 0) {
+                        mScene.removeEntity(root);
                     }
                     mAssetLoader.destroyAsset(mSkyboxAsset);
                 } catch (Exception e) {

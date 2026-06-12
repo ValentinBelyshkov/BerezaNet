@@ -30,6 +30,9 @@ public final class Mission {
     public final Double userAltitudeAmsl;
     public final boolean useManualGps;
 
+    // Sound effects (off by default)
+    public final boolean soundEnabled;
+
     public enum SimulationState { IDLE, RUNNING, PAUSED }
 
 
@@ -37,7 +40,8 @@ public final class Mission {
                    GeoFence geoFence, Double originLatitude, Double originLongitude,
                    Double originAltitudeAmsl, int droneCount, int shotDownCount, SimulationState simState, int color,
                    int maxLives, float speedKmh, float altitudeMeters, float spawnIntervalSeconds,
-                   Double userLatitude, Double userLongitude, Double userAltitudeAmsl, boolean useManualGps) {
+                   Double userLatitude, Double userLongitude, Double userAltitudeAmsl, boolean useManualGps,
+                   boolean soundEnabled) {
         this.id = id;
         this.name = name;
         this.waypoints = Collections.unmodifiableList(new ArrayList<>(waypoints));
@@ -58,39 +62,40 @@ public final class Mission {
         this.userLongitude = userLongitude;
         this.userAltitudeAmsl = userAltitudeAmsl;
         this.useManualGps = useManualGps;
+        this.soundEnabled = soundEnabled;
     }
 
     // overload для совместимости
     public Mission(String id, String name, List<Waypoint> waypoints, List<GeoAnchor> geoAnchors,
                    GeoFence geoFence, Double originLatitude, Double originLongitude,
                    Double originAltitudeAmsl) {
-        this(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, 1, 0, SimulationState.IDLE, 0xFFFF0000, 3, 200f, 100f, 90f, null, null, null, false);
+        this(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, 1, 0, SimulationState.IDLE, 0xFFFF0000, 3, 200f, 100f, 90f, null, null, null, false, false);
     }
 
     public Mission withName(String name) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withWaypoints(List<Waypoint> waypoints) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withGeoAnchors(List<GeoAnchor> geoAnchors) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withGeoFence(GeoFence geoFence) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withOrigin(double lat, double lon, double alt) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, lat, lon, alt, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, lat, lon, alt, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withDroneCount(int count) {
         return new Mission(id, name, waypoints, geoAnchors, geoFence,
                 originLatitude, originLongitude, originAltitudeAmsl,
-                Math.max(1, count), shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+                Math.max(1, count), shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public double[] resolveOrigin() {
@@ -107,40 +112,45 @@ public final class Mission {
         }
         return null;
     }
+
     public Mission withShotDownCount(int count) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, count, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, count, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withSimState(SimulationState state) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, state, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, state, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withColor(int color) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withMaxLives(int maxLives) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withSpeedKmh(float speedKmh) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withAltitudeMeters(float altitudeMeters) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withSpawnIntervalSeconds(float spawnIntervalSeconds) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withUserPosition(Double lat, Double lon, Double altAmsl) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, lat, lon, altAmsl, useManualGps);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, lat, lon, altAmsl, useManualGps, soundEnabled);
     }
 
     public Mission withUseManualGps(boolean use) {
-        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, use);
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, use, soundEnabled);
+    }
+
+    public Mission withSoundEnabled(boolean soundEnabled) {
+        return new Mission(id, name, waypoints, geoAnchors, geoFence, originLatitude, originLongitude, originAltitudeAmsl, droneCount, shotDownCount, simState, color, maxLives, speedKmh, altitudeMeters, spawnIntervalSeconds, userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 
     public Mission sanitize() {
@@ -150,6 +160,6 @@ public final class Mission {
                 speedKmh > 0 ? speedKmh : 200f,
                 altitudeMeters > 0 ? altitudeMeters : 100f,
                 spawnIntervalSeconds > 0 ? spawnIntervalSeconds : 90f,
-                userLatitude, userLongitude, userAltitudeAmsl, useManualGps);
+                userLatitude, userLongitude, userAltitudeAmsl, useManualGps, soundEnabled);
     }
 }

@@ -160,4 +160,9 @@ public abstract class MissionIntent {
         public final boolean use;
         public SetUseManualGps(boolean use) { this.use = use; }
     }
+
+    public static final class SetSoundEnabled extends MissionIntent {
+        public final boolean enabled;
+        public SetSoundEnabled(boolean enabled) { this.enabled = enabled; }
+    }
 }

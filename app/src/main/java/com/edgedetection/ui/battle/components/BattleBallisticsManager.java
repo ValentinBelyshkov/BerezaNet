@@ -21,10 +21,16 @@ public class BattleBallisticsManager {
     private final List<Bullet> bullets = new ArrayList<>();
     private final Context context;
     private final FragmentActivity activity;
+    private float bestMissDistance = Float.MAX_VALUE;
+    private Runnable onHitCallback;
 
     public BattleBallisticsManager(Context context, FragmentActivity activity) {
         this.context = context;
         this.activity = activity;
+    }
+
+    public void setOnHitCallback(Runnable callback) {
+        this.onHitCallback = callback;
     }
 
     public void fireBullet(float camForwardX, float camForwardY, float camForwardZ) {
@@ -51,16 +57,23 @@ public class BattleBallisticsManager {
             b.update(dt);
             if (b.active && simulationActive) {
                 float d = b.distanceTo(lastDroneX, lastDroneY, lastDroneZ);
+                if (d < b.minDistToDrone) b.minDistToDrone = d;
                 if (d < droneRadius + 0.05f) {
                     b.active = false;
                     b.hit = true;
                     Log.i(TAG, ">>> HIT DRONE! dist=" + d + "m");
                     Toast.makeText(context, "Попадание!", Toast.LENGTH_SHORT).show();
-                    
                     MissionViewModel missionVm = new ViewModelProvider(activity).get(MissionViewModel.class);
                     missionVm.dispatch(new MissionIntent.ShotDownDrone(currentDroneIndex));
+                    if (onHitCallback != null) onHitCallback.run();
                 }
-            } else if (!b.hit) {
+            } else if (!b.active && !b.hit) {
+                if (b.minDistToDrone < Float.MAX_VALUE) {
+                    if (b.minDistToDrone < bestMissDistance) {
+                        bestMissDistance = b.minDistToDrone;
+                    }
+                    Log.i(TAG, "MISS: " + String.format("%.1f", b.minDistToDrone) + "m  |  BEST: " + String.format("%.1f", bestMissDistance) + "m");
+                }
                 toRemove.add(b);
             } else if (b.hit) {
                 if (System.currentTimeMillis() - b.spawnTime > 2000) toRemove.add(b);
@@ -71,6 +84,14 @@ public class BattleBallisticsManager {
 
     public List<Bullet> getBullets() {
         return bullets;
+    }
+
+    public float getBestMissDistance() {
+        return bestMissDistance;
+    }
+
+    public boolean hasBestMiss() {
+        return bestMissDistance < Float.MAX_VALUE;
     }
 
     public void clear() {

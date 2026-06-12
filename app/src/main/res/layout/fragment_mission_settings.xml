@@ -132,4 +132,30 @@
         </LinearLayout>
     </GridLayout>
 
+    <!-- Sound Effects -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Звуковые сигналы (приближение/попадание)"
+            android:textSize="14sp"
+            android:textColor="#333333"/>
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/sw_sound_enabled"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:textColor="#333333"
+            android:textSize="14sp"/>
+    </LinearLayout>
+
 </LinearLayout>

@@ -1,200 +1,223 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-android:layout_width="match_parent"
-android:layout_height="match_parent">
-
-<androidx.camera.view.PreviewView
-    android:id="@+id/preview_view"
-    android:layout_width="1dp"
-    android:layout_height="1dp"
-    android:visibility="invisible" />
-
-<TextureView
-    android:id="@+id/rtsp_texture_view"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:visibility="invisible" />
+    android:layout_height="match_parent">
 
-<com.edgedetection.opengl.EdgeDetectionGLView
-    android:id="@+id/camera_view"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    <androidx.camera.view.PreviewView
+        android:id="@+id/preview_view"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="invisible" />
 
-<!-- AR overlay: SurfaceView для Filament -->
-<SurfaceView
-    android:id="@+id/ar_overlay"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    <TextureView
+        android:id="@+id/rtsp_texture_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="invisible" />
 
-<!-- Оверлей траекторий + точка упреждения (поверх AR) -->
-<com.edgedetection.ui.battle.BulletTrajectoryView
-    android:id="@+id/bullet_overlay"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    <com.edgedetection.opengl.EdgeDetectionGLView
+        android:id="@+id/camera_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-<ImageView
-    android:id="@+id/offscreen_indicator"
-    android:layout_width="48dp"
-    android:layout_height="48dp"
-    android:src="@drawable/ic_arrow"
-    android:visibility="gone"
-    android:layout_gravity="center" />
+    <!-- AR overlay: SurfaceView для Filament -->
+    <SurfaceView
+        android:id="@+id/ar_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-<TextView
-    android:id="@+id/gps_warning"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="GPS недоступен — последняя известная позиция"
-    android:textColor="#FF4444"
-    android:textSize="14sp"
-    android:background="#CC000000"
-    android:padding="8dp"
-    android:visibility="gone"
-    android:layout_gravity="top|center_horizontal"
-    android:layout_marginTop="24dp" />
+    <!-- Оверлей траекторий + точка упреждения (поверх AR) -->
+    <com.edgedetection.ui.battle.BulletTrajectoryView
+        android:id="@+id/bullet_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-<!-- Маркер калибровочной точки (появляется при тапе) -->
-<ImageView
-    android:id="@+id/calibration_marker"
-    android:layout_width="24dp"
-    android:layout_height="24dp"
-    android:src="@drawable/ic_crosshair"
-    android:visibility="gone"
-    android:contentDescription="Точка упреждения" />
+    <!-- Тепловизор: чёрный фон + тепловое изображение дрона, FOV 8° -->
+    <com.edgedetection.ui.battle.ThermalOverlayView
+        android:id="@+id/thermal_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 
-<!-- ===== ЛЕВАЯ КОЛОНКА (снизу вверх) ===== -->
+    <ImageView
+        android:id="@+id/offscreen_indicator"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_arrow"
+        android:visibility="gone"
+        android:layout_gravity="center" />
 
-<!-- Кнопка калибровки -->
-<android.widget.Button
-    android:id="@+id/calibrate_button"
-    android:layout_width="wrap_content"
-    android:layout_height="48dp"
-    android:layout_gravity="start|bottom"
-    android:layout_marginStart="16dp"
-    android:layout_marginBottom="40dp"
-    android:background="#CC000000"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:text="Калибровка"
-    android:contentDescription="Калибровка" />
+    <TextView
+        android:id="@+id/gps_warning"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="GPS недоступен — последняя известная позиция"
+        android:textColor="#FF4444"
+        android:textSize="14sp"
+        android:background="#CC000000"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="24dp" />
 
-<!-- Кнопка переключения камеры -->
-<android.widget.Button
-    android:id="@+id/switch_camera_button"
-    android:layout_width="wrap_content"
-    android:layout_height="48dp"
-    android:layout_gravity="start|bottom"
-    android:layout_marginStart="16dp"
-    android:layout_marginBottom="96dp"
-    android:background="#CC000000"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:text="Смена камеры"
-    android:contentDescription="Смена камеры" />
+    <!-- Маркер калибровочной точки (появляется при тапе) -->
+    <ImageView
+        android:id="@+id/calibration_marker"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_crosshair"
+        android:visibility="gone"
+        android:contentDescription="Точка упреждения" />
 
-<!-- Кнопка переключения обработки (Edge Detector) -->
-<android.widget.Button
-    android:id="@+id/toggle_edges_button"
-    android:layout_width="wrap_content"
-    android:layout_height="48dp"
-    android:layout_gravity="start|bottom"
-    android:layout_marginStart="16dp"
-    android:layout_marginBottom="152dp"
-    android:background="#CC000000"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:text="Обработка: Выкл"
-    android:contentDescription="Переключение обработки" />
+    <!-- ===== ЛЕВАЯ КОЛОНКА (снизу вверх) ===== -->
 
-<!-- Кнопка отображения сторон света (AR-кубы) -->
-<android.widget.Button
-    android:id="@+id/compass_cubes_button"
-    android:layout_width="wrap_content"
-    android:layout_height="48dp"
-    android:layout_gravity="start|bottom"
-    android:layout_marginStart="16dp"
-    android:layout_marginBottom="208dp"
-    android:background="#CC000000"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:text="Стороны света"
-    android:contentDescription="Стороны света" />
+    <!-- Кнопка калибровки -->
+    <android.widget.Button
+        android:id="@+id/calibrate_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="40dp"
+        android:background="#CC000000"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Калибровка"
+        android:contentDescription="Калибровка" />
 
-<!-- AR-оверлей компасных кубов -->
-<com.edgedetection.ui.battle.CompassCubeOverlay
-    android:id="@+id/compass_cube_overlay"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:visibility="gone" />
+    <!-- Кнопка переключения камеры -->
+    <android.widget.Button
+        android:id="@+id/switch_camera_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="96dp"
+        android:background="#CC000000"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Смена камеры"
+        android:contentDescription="Смена камеры" />
 
-<!-- ===== ПРАВАЯ КОЛОНКА ===== -->
+    <!-- Кнопка переключения обработки (Edge Detector) -->
+    <android.widget.Button
+        android:id="@+id/toggle_edges_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="152dp"
+        android:background="#CC000000"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Обработка: Выкл"
+        android:contentDescription="Переключение обработки" />
 
-<!-- Кнопка огня — по центру вертикально, правый край -->
-<ImageButton
-    android:id="@+id/fire_button"
-    android:layout_width="80dp"
-    android:layout_height="80dp"
-    android:layout_gravity="center_vertical|end"
-    android:layout_marginEnd="16dp"
-    android:background="@drawable/bg_fire_button"
-    android:src="@android:drawable/ic_menu_send"
-    android:tint="#FFFFFF"
-    android:contentDescription="Огонь" />
+    <!-- Кнопка отображения сторон света (AR-кубы) -->
+    <android.widget.Button
+        android:id="@+id/compass_cubes_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="208dp"
+        android:background="#CC000000"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Стороны света"
+        android:contentDescription="Стороны света" />
 
-<!-- Кнопка управления симуляцией — правый нижний угол -->
-<android.widget.Button
-    android:id="@+id/simulation_button"
-    android:layout_width="wrap_content"
-    android:layout_height="48dp"
-    android:layout_gravity="end|bottom"
-    android:layout_marginEnd="16dp"
-    android:layout_marginBottom="40dp"
-    android:background="#CC005500"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:text="Старт симуляции"
-    android:contentDescription="Управление симуляцией" />
+    <!-- Кнопка тепловизора FOV 8° -->
+    <android.widget.Button
+        android:id="@+id/thermal_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="264dp"
+        android:background="#CC001A00"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Тепловизор"
+        android:contentDescription="Тепловизор FOV 8°" />
 
-<!-- RTSP status indicator -->
-<TextView
-    android:id="@+id/rtsp_status"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_gravity="top|start"
-    android:layout_marginStart="8dp"
-    android:layout_marginTop="8dp"
-    android:background="#CC000000"
-    android:paddingStart="10dp"
-    android:paddingEnd="10dp"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp"
-    android:textSize="12sp"
-    android:textStyle="bold"
-    android:visibility="gone" />
+    <!-- AR-оверлей компасных кубов -->
+    <com.edgedetection.ui.battle.CompassCubeOverlay
+        android:id="@+id/compass_cube_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 
-<!-- VIT Info overlay -->
-<TextView
-    android:id="@+id/vit_info"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_gravity="end|top"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="48dp"
-    android:textColor="#00FF00"
-    android:textSize="11sp"
-    android:background="#AA000000"
-    android:padding="6dp"
-    android:visibility="visible"
-    android:contentDescription="VIT Информация" />
+    <!-- ===== ПРАВАЯ КОЛОНКА ===== -->
+
+    <!-- Кнопка огня — правый нижний угол -->
+    <ImageButton
+        android:id="@+id/fire_button"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="40dp"
+        android:background="@drawable/bg_fire_button"
+        android:src="@android:drawable/ic_menu_send"
+        android:tint="#FFFFFF"
+        android:contentDescription="Огонь" />
+
+    <!-- Кнопка управления симуляцией — правый верхний угол -->
+    <android.widget.Button
+        android:id="@+id/simulation_button"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="end|top"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="16dp"
+        android:background="#CC005500"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="Старт симуляции"
+        android:contentDescription="Управление симуляцией" />
+
+    <!-- RTSP status indicator -->
+    <TextView
+        android:id="@+id/rtsp_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="8dp"
+        android:background="#CC000000"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- VIT Info overlay -->
+    <TextView
+        android:id="@+id/vit_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="8dp"
+        android:textColor="#00FF00"
+        android:textSize="11sp"
+        android:background="#AA000000"
+        android:padding="6dp"
+        android:visibility="visible"
+        android:contentDescription="VIT Информация" />
 
 </FrameLayout>

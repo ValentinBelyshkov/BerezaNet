@@ -46,6 +46,8 @@ import com.edgedetection.ui.battle.components.BattleLocationManager;
 import com.edgedetection.ui.battle.components.BattleLogger;
 import com.edgedetection.ui.battle.components.BattleSceneRenderer;
 import com.edgedetection.ui.battle.components.BattleSensorProvider;
+import com.edgedetection.ui.battle.components.BattleSoundManager;
+import com.edgedetection.ui.battle.ThermalOverlayView;
 import com.edgedetection.ui.shared.MissionIntent;
 import com.edgedetection.ui.shared.MissionViewModel;
 import com.google.android.filament.Viewport;
@@ -69,6 +71,7 @@ public class BattleFragment extends Fragment {
     private BattleBallisticsManager ballisticsManager;
     private BattleSceneRenderer sceneRenderer;
     private BattleFrameProcessor frameProcessor;
+    private BattleSoundManager soundManager;
 
     // --- State ---
     private BattleViewModel viewModel;
@@ -77,7 +80,7 @@ public class BattleFragment extends Fragment {
     private ExecutorService cameraExecutor;
     private Handler imuHandler;
     private Handler calibrationHandler;
-
+    
     private volatile float lastGyroX = 0f, lastGyroY = 0f, lastGyroZ = 0f;
     private volatile long lastGyroTimestampNs = 0;
     private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
@@ -90,6 +93,9 @@ public class BattleFragment extends Fragment {
     private PreviewView previewView;
     private TextureView rtspTextureView;
     private BulletTrajectoryView bulletOverlay;
+    private ThermalOverlayView thermalOverlay;
+    private Button thermalButton;
+    private boolean thermalActive = false;
     private ImageView calibrationMarker;
     private TextView vitInfoText;
     private TextView rtspStatusView;
@@ -174,6 +180,8 @@ public class BattleFragment extends Fragment {
         });
 
         ballisticsManager = new BattleBallisticsManager(requireContext(), requireActivity());
+        soundManager = new BattleSoundManager();
+        ballisticsManager.setOnHitCallback(() -> soundManager.onHit());
     }
 
     @Nullable
@@ -190,11 +198,11 @@ public class BattleFragment extends Fragment {
         initViews(view);
         setupObservers();
 
-        sceneRenderer = new BattleSceneRenderer(requireContext(),
-                view.findViewById(R.id.ar_overlay),
-                view.findViewById(R.id.offscreen_indicator),
+        sceneRenderer = new BattleSceneRenderer(requireContext(), 
+                view.findViewById(R.id.ar_overlay), 
+                view.findViewById(R.id.offscreen_indicator), 
                 view.findViewById(R.id.gps_warning));
-
+        
         frameProcessor = new BattleFrameProcessor(requireContext(), viewModel, glView, TARGET_WIDTH_M, TARGET_LENGTH_M);
 
         checkPermissions();
@@ -207,6 +215,8 @@ public class BattleFragment extends Fragment {
         glView = view.findViewById(R.id.camera_view);
         gpsWarning = view.findViewById(R.id.gps_warning);
         bulletOverlay = view.findViewById(R.id.bullet_overlay);
+        thermalOverlay = view.findViewById(R.id.thermal_overlay);
+        thermalButton = view.findViewById(R.id.thermal_button);
         calibrationMarker = view.findViewById(R.id.calibration_marker);
         vitInfoText = view.findViewById(R.id.vit_info);
         calibrateButton = view.findViewById(R.id.calibrate_button);
@@ -232,6 +242,13 @@ public class BattleFragment extends Fragment {
             compassCubesVisible = !compassCubesVisible;
             compassCubeOverlay.setVisibility(compassCubesVisible ? View.VISIBLE : View.GONE);
             compassCubesButton.setText(compassCubesVisible ? "Скрыть стороны" : "Стороны света");
+        });
+
+        thermalButton.setOnClickListener(v -> {
+            thermalActive = !thermalActive;
+            thermalOverlay.setVisibility(thermalActive ? View.VISIBLE : View.GONE);
+            thermalButton.setBackgroundColor(thermalActive ? 0xCC004400 : 0xCC001A00);
+            thermalButton.setText(thermalActive ? "Тепловизор: ВКЛ" : "Тепловизор");
         });
 
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
@@ -329,6 +346,7 @@ public class BattleFragment extends Fragment {
             if (!this.simulationActive) {
                 sceneRenderer.setHasRelativePosition(false);
             }
+            if (soundManager != null) soundManager.setEnabled(mission.soundEnabled);
         });
 
         missionVm.getDronePosition().observe(getViewLifecycleOwner(), pos -> {
@@ -489,7 +507,7 @@ public class BattleFragment extends Fragment {
             refLat = 0; refLon = 0; refAlt = 0;
         }
 
-        sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
+sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
         // --- Drone velocity + lead point ---
         if (simulationActive && hasDronePosition && sceneRenderer.hasRelativePosition()) {
             float cx = sceneRenderer.getLastDroneX();
@@ -515,10 +533,10 @@ public class BattleFragment extends Fragment {
             }
             if (bulletOverlay != null) {
                 bulletOverlay.setLeadPoint(
-                        sceneRenderer.getLastDroneX() + droneVelFilX * LEAD_TIME_SEC,
-                        sceneRenderer.getLastDroneY() + droneVelFilY * LEAD_TIME_SEC,
-                        sceneRenderer.getLastDroneZ() + droneVelFilZ * LEAD_TIME_SEC,
-                        true
+                    sceneRenderer.getLastDroneX() + droneVelFilX * LEAD_TIME_SEC,
+                    sceneRenderer.getLastDroneY() + droneVelFilY * LEAD_TIME_SEC,
+                    sceneRenderer.getLastDroneZ() + droneVelFilZ * LEAD_TIME_SEC,
+                    true
                 );
             }
         } else {
@@ -527,14 +545,46 @@ public class BattleFragment extends Fragment {
             if (bulletOverlay != null) bulletOverlay.setLeadPoint(0, 0, 0, false);
         }
 
+        // Sound proximity update
+        if (soundManager != null) {
+            if (sceneRenderer.hasRelativePosition() && hasDronePosition) {
+                float sdx = sceneRenderer.getLastDroneX();
+                float sdy = sceneRenderer.getLastDroneY() - 1.6f;
+                float sdz = sceneRenderer.getLastDroneZ();
+                float sDist = (float) Math.sqrt(sdx * sdx + sdy * sdy + sdz * sdz);
+                soundManager.updateDistance(sDist);
+            } else {
+                soundManager.onDroneLost();
+            }
+        }
+
+        // Thermal overlay update
+        if (thermalActive && thermalOverlay != null && sceneRenderer.hasRelativePosition()) {
+            float ldx = sceneRenderer.getLastDroneX();
+            float ldy = sceneRenderer.getLastDroneY();
+            float ldz = sceneRenderer.getLastDroneZ();
+            float eddx = ldx, eddy = ldy - 1.6f, eddz = ldz;
+            float currentDist = (float) Math.sqrt(eddx * eddx + eddy * eddy + eddz * eddz);
+            float bestMiss = ballisticsManager.hasBestMiss() ? ballisticsManager.getBestMissDistance() : -1f;
+            boolean lv = simulationActive && hasDronePosition;
+            float tlx = lv ? ldx + droneVelFilX * LEAD_TIME_SEC : 0;
+            float tly = lv ? ldy + droneVelFilY * LEAD_TIME_SEC : 0;
+            float tlz = lv ? ldz + droneVelFilZ * LEAD_TIME_SEC : 0;
+            thermalOverlay.update(fx, fy, fz, ux, uy, uz,
+                    ldx, ldy, ldz, tlx, tly, tlz, lv,
+                    currentDist, bestMiss);
+        }
+
         long now = System.currentTimeMillis();
         if (now - lastLogTime > 1000 && sceneRenderer.hasRelativePosition()) {
             lastLogTime = now;
             double[] enu = com.edgedetection.domain.geo.GeoUtils.ecefToEnu(refLat, refLon, refAlt, droneLat, droneLon, droneAlt);
-            BattleLogger.logState(fx, fy, fz, ux, uy, uz, refLat, refLon, refAlt, enu,
-                    sceneRenderer.getLastDroneX(), sceneRenderer.getLastDroneY(), sceneRenderer.getLastDroneZ(),
-                    droneLat, droneLon, droneAlt, sensorProvider.getLastRotationVector(), sensorProvider.getRotationMatrix(),
-                    sceneRenderer.getArRenderer(), sceneRenderer.isDroneVisible(fx, fy, fz, ux, uy, uz));
+            double distM = Math.sqrt(enu[0]*enu[0] + enu[1]*enu[1] + enu[2]*enu[2]);
+            BattleLogger.logState(fx, fy, fz, ux, uy, uz, refLat, refLon, refAlt, enu, distM,
+                sceneRenderer.getLastDroneX(), sceneRenderer.getLastDroneY(), sceneRenderer.getLastDroneZ(),
+                droneLat, droneLon, droneAlt, sensorProvider.getLastRotationVector(), sensorProvider.getRotationMatrix(),
+                sceneRenderer.getArRenderer(), sceneRenderer.isDroneVisible(fx, fy, fz, ux, uy, uz),
+                ballisticsManager.hasBestMiss() ? ballisticsManager.getBestMissDistance() : -1f);
         }
 
         if (dt > 0 && dt < 0.5f) {
@@ -571,22 +621,38 @@ public class BattleFragment extends Fragment {
     private void updateVITInfo() {
         if (vitInfoText == null || frameProcessor == null) return;
         VITTracker.TargetState ts = frameProcessor.getLastTargetState();
-
+        
         StringBuilder sb = new StringBuilder();
         sb.append("=== CAMERA ===\n");
         sb.append(String.format("Pitch: %7.2f (Rate: %6.1f deg/s)\n", lastPitch, Math.toDegrees(lastGyroX)));
         sb.append(String.format("Yaw:   %7.2f (Rate: %6.1f deg/s)\n", lastYaw, Math.toDegrees(lastGyroY)));
         sb.append(String.format("Roll:  %7.2f (Rate: %6.1f deg/s)\n", lastRoll, Math.toDegrees(lastGyroZ)));
-
+        
         sb.append("\n=== TRACKER ===\n");
         if (ts != null && ts.detected) {
             sb.append(String.format("Blob: x=%.0f y=%.0f\n", ts.bboxX + ts.bboxW/2f, ts.bboxY + ts.bboxH/2f));
             sb.append(String.format("Size: %.1fpx\n", ts.bboxW));
-            sb.append(String.format("Conf: %.2f", ts.confidence));
+            sb.append(String.format("Conf: %.2f\n", ts.confidence));
         } else {
-            sb.append("ПОИСК...");
+            sb.append("ПОИСК...\n");
         }
 
+        sb.append("\n=== БАЛЛИСТИКА ===\n");
+        if (sceneRenderer != null && sceneRenderer.hasRelativePosition() && hasDronePosition) {
+            float ldx = sceneRenderer.getLastDroneX();
+            float ldy = sceneRenderer.getLastDroneY() - 1.6f;
+            float ldz = sceneRenderer.getLastDroneZ();
+            float dist = (float) Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
+            sb.append(String.format("Дист. до цели: %5.0f м\n", dist));
+        } else {
+            sb.append("Дист. до цели: ---\n");
+        }
+        if (ballisticsManager != null && ballisticsManager.hasBestMiss()) {
+            sb.append(String.format("Лучш. промах:  %5.0f м\n", ballisticsManager.getBestMissDistance()));
+        } else {
+            sb.append("Лучш. промах:  ---\n");
+        }
+        
         vitInfoText.setText(sb.toString());
     }
 
@@ -680,6 +746,7 @@ public class BattleFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        if (soundManager != null) { soundManager.release(); soundManager = null; }
         ballisticsManager.clear();
         if (choreographer != null) choreographer.removeFrameCallback(frameCallback);
         if (cameraManager != null && cameraManager.getCurrentSource().getValue() != null) {
