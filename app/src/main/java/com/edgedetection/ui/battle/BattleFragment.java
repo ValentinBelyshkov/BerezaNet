@@ -94,6 +94,12 @@ public class BattleFragment extends Fragment {
     private CompassCubeOverlay compassCubeOverlay;
     private boolean compassCubesVisible = false;
     private Button simulationButton;
+
+    // --- Drone velocity for lead point ---
+    private float prevDroneFilX, prevDroneFilY, prevDroneFilZ;
+    private float droneVelFilX = 0, droneVelFilY = 0, droneVelFilZ = 0;
+    private long prevDroneFilTimeMs = 0;
+    private boolean hasPrevDroneFilPos = false;
     private TextView gpsWarning;
 
     // --- Simulation state ---
