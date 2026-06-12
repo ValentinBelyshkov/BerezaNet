@@ -12,6 +12,8 @@ import com.edgedetection.ui.battle.BattleViewModel;
 
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Point;
+import org.opencv.core.Scalar;
 
 import java.nio.ByteBuffer;
 
@@ -147,6 +149,8 @@ public class BattleFrameProcessor {
                 );
             }
 
+            drawCenterRedDot(finalMat);
+
             if (vitTracker != null) {
                 vitTracker.drawOverlay(finalMat, lastTargetState, pitch, yaw, roll, lastGyroX, lastGyroY, lastGyroZ);
             }
@@ -170,6 +174,11 @@ public class BattleFrameProcessor {
         if (vitTracker != null) {
             vitTracker.release();
         }
+    }
+
+    private void drawCenterRedDot(Mat mat) {
+        if (mat == null || mat.empty()) return;
+        org.opencv.imgproc.Imgproc.circle(mat, new Point(mat.cols() / 2f, mat.rows() / 2f), 8, new Scalar(255, 0, 0, 255), -1);
     }
 
     public VITTracker.TargetState getLastTargetState() {
