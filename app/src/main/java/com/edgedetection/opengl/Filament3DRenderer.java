@@ -301,21 +301,13 @@ public class Filament3DRenderer {
     public void setModelVisible(boolean visible) {
         if (mAsset == null || mDestroyed || mEngineDestroyed) return;
 
-        // ✅ ИСПРАВЛЕНО: Управляем видимостью через root
-        int root = mAsset.getRoot();
-        if (root != 0) {
-            if (visible) {
-                mScene.addEntity(root);
-            } else {
-                mScene.removeEntity(root);
-            }
-        } else {
-            int[] entities = mAsset.getEntities();
-            if (entities != null && entities.length > 0) {
+        int[] entities = mAsset.getEntities();
+        if (entities != null) {
+            for (int entity : entities) {
                 if (visible) {
-                    mScene.addEntity(entities[0]);
+                    mScene.addEntity(entity);
                 } else {
-                    mScene.removeEntity(entities[0]);
+                    mScene.removeEntity(entity);
                 }
             }
         }
@@ -685,10 +677,11 @@ public class Filament3DRenderer {
 
             if (mAsset != null) {
                 try {
-                    // ✅ ИСПРАВЛЕНО: Удаляем только root
-                    int root = mAsset.getRoot();
-                    if (root != 0) {
-                        mScene.removeEntity(root);
+                    int[] entities = mAsset.getEntities();
+                    if (entities != null) {
+                        for (int entity : entities) {
+                            mScene.removeEntity(entity);
+                        }
                     }
                     mAssetLoader.destroyAsset(mAsset);
                 } catch (Exception e) {
@@ -714,10 +707,11 @@ public class Filament3DRenderer {
             }
             if (mSkyboxAsset != null) {
                 try {
-                    // ✅ ИСПРАВЛЕНО: Удаляем только root
-                    int root = mSkyboxAsset.getRoot();
-                    if (root != 0) {
-                        mScene.removeEntity(root);
+                    int[] entities = mSkyboxAsset.getEntities();
+                    if (entities != null) {
+                        for (int entity : entities) {
+                            mScene.removeEntity(entity);
+                        }
                     }
                     mAssetLoader.destroyAsset(mSkyboxAsset);
                 } catch (Exception e) {
