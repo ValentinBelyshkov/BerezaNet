@@ -190,6 +190,7 @@ public class BattleSceneRenderer {
         return arRenderer;
     }
 
+
     public float getLastDroneX() { return lastDroneX; }
     public float getLastDroneY() { return lastDroneY; }
     public float getLastDroneZ() { return lastDroneZ; }
