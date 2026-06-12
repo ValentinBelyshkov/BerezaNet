@@ -18,6 +18,7 @@ package="com.edgedetection">
     android:icon="@mipmap/ic_launcher"
     android:label="@string/app_name"
     android:supportsRtl="true"
+    android:usesCleartextTraffic="true"
     android:theme="@style/Theme.BerezaNet">
 
     <!-- Главная Activity — НОВАЯ, из папки app -->

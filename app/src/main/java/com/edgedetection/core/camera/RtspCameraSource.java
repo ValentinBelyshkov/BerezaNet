@@ -134,6 +134,7 @@ public class RtspCameraSource implements CameraSource {
         frameThread.start();
         frameHandler = new Handler(frameThread.getLooper());
 
+        Log.i(TAG, "start() called, URL: " + rtspUrl);
         notifyStatus(Status.CONNECTING);
         mainHandler.post(this::createPlayer);
     }
@@ -141,9 +142,11 @@ public class RtspCameraSource implements CameraSource {
     @OptIn(markerClass = UnstableApi.class)
     private void createPlayer() {
         if (!isRunning) return;
+        Log.i(TAG, "createPlayer() — connecting to: " + rtspUrl);
         try {
             player = new ExoPlayer.Builder(context).build();
             player.setVideoTextureView(textureView);
+            Log.i(TAG, "ExoPlayer built, TextureView set");
 
             RtspMediaSource mediaSource = new RtspMediaSource.Factory()
                     .createMediaSource(MediaItem.fromUri(rtspUrl));
@@ -151,10 +154,21 @@ public class RtspCameraSource implements CameraSource {
             player.setMediaSource(mediaSource);
             player.prepare();
             player.setPlayWhenReady(true);
+            Log.i(TAG, "Player prepared and play requested");
 
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int state) {
+                    String stateName;
+                    switch (state) {
+                        case Player.STATE_IDLE:     stateName = "IDLE"; break;
+                        case Player.STATE_BUFFERING: stateName = "BUFFERING"; break;
+                        case Player.STATE_READY:    stateName = "READY"; break;
+                        case Player.STATE_ENDED:    stateName = "ENDED"; break;
+                        default:                    stateName = "UNKNOWN(" + state + ")";
+                    }
+                    Log.i(TAG, "Player state: " + stateName);
+
                     if (state == Player.STATE_READY) {
                         Log.i(TAG, "RTSP stream ready");
                         isConnected = true;
@@ -165,21 +179,21 @@ public class RtspCameraSource implements CameraSource {
                         frameHandler.post(frameCaptureRunnable);
                         frameHandler.removeCallbacks(watchdogRunnable);
                         frameHandler.postDelayed(watchdogRunnable, WATCHDOG_TIMEOUT_MS);
-                    } else if (state == Player.STATE_ENDED) {
-                        Log.w(TAG, "RTSP stream ended — reconnecting");
-                        isConnected = false;
-                        scheduleReconnect();
-                    } else if (state == Player.STATE_IDLE) {
-                        if (isConnected) {
-                            Log.w(TAG, "RTSP player went idle — reconnecting");
-                            isConnected = false;
-                            scheduleReconnect();
-                        }
+                    } else if (state == Player.STATE_ENDED){
+                        Log.w(TAG, "Stream ended — reconnecting");
+                    isConnected = false;
+                    scheduleReconnect();
+                } else if (state == Player.STATE_IDLE && isConnected) {
+                    Log.w(TAG, "Player went idle — reconnecting");
+                    isConnected = false;
+                    scheduleReconnect();
                     }
                 }
 
                 @Override
                 public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    Log.e(TAG, "Player error code=" + error.errorCode
+                            + " msg=" + error.getMessage(), error);
                     Log.e(TAG, "RTSP error: " + error.getMessage());
                     isConnected = false;
                     scheduleReconnect();
