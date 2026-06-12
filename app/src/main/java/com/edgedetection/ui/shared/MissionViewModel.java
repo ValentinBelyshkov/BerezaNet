@@ -66,9 +66,10 @@ public class MissionViewModel extends AndroidViewModel {
 
         this.missionData = new MutableLiveData<>(new Mission(
                 UUID.randomUUID().toString(), "Маршрут 1",
-                Collections.emptyList(), Collections.emptyList(),
+                new ArrayList<>(), new ArrayList<>(),
                 null, null, null, null, 1, 0, Mission.SimulationState.IDLE, MISSION_COLORS[0],
-                savedLives, savedSpeed, savedAltitude, savedSpawn));
+                savedLives, savedSpeed, savedAltitude, savedSpawn,
+                null, null, null, false));
         this.executor = Executors.newSingleThreadExecutor();
         loadAllMissions();
     }
@@ -164,6 +165,11 @@ public class MissionViewModel extends AndroidViewModel {
             float val = ((MissionIntent.SetSpawnInterval) intent).spawnIntervalSeconds;
             getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putFloat(KEY_SPAWN, val).apply();
             update(m -> m.withSpawnIntervalSeconds(val));
+        } else if (intent instanceof MissionIntent.SetManualUserPosition) {
+            MissionIntent.SetManualUserPosition i = (MissionIntent.SetManualUserPosition) intent;
+            update(m -> m.withUserPosition(i.lat, i.lon, i.altAmsl));
+        } else if (intent instanceof MissionIntent.SetUseManualGps) {
+            update(m -> m.withUseManualGps(((MissionIntent.SetUseManualGps) intent).use));
         }
     }
 
@@ -223,7 +229,8 @@ public class MissionViewModel extends AndroidViewModel {
             if (origin == null) {
                 return new Mission(m.id, m.name, list, m.geoAnchors, m.geoFence,
                         intent.lat, intent.lon, intent.altAmsl, m.droneCount, m.shotDownCount, m.simState, m.color,
-                        m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds);
+                        m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds,
+                        m.userLatitude, m.userLongitude, m.userAltitudeAmsl, m.useManualGps);
             }
             return m.withWaypoints(list);
         });
@@ -312,7 +319,9 @@ public class MissionViewModel extends AndroidViewModel {
             if (origin == null) {
                 GeoAnchor a = intent.anchor;
                 return new Mission(m.id, m.name, m.waypoints, list, m.geoFence,
-                        a.latitude, a.longitude, a.altitudeAmsl);
+                        a.latitude, a.longitude, a.altitudeAmsl, m.droneCount, m.shotDownCount, m.simState, m.color,
+                        m.maxLives, m.speedKmh, m.altitudeMeters, m.spawnIntervalSeconds,
+                        m.userLatitude, m.userLongitude, m.userAltitudeAmsl, m.useManualGps);
             }
             return m.withGeoAnchors(list);
         });
@@ -413,9 +422,10 @@ public class MissionViewModel extends AndroidViewModel {
         Mission next;
         if (current != null) {
             next = new Mission(UUID.randomUUID().toString(), name,
-                Collections.emptyList(), Collections.emptyList(),
+                new ArrayList<>(), new ArrayList<>(),
                 current.geoFence, null, null, null, current.droneCount, 0, Mission.SimulationState.IDLE, color,
-                current.maxLives, current.speedKmh, current.altitudeMeters, current.spawnIntervalSeconds);
+                current.maxLives, current.speedKmh, current.altitudeMeters, current.spawnIntervalSeconds,
+                null, null, null, false);
         } else {
             SharedPreferences prefs = getApplication().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             int savedLives = prefs.getInt(KEY_LIVES, 3);
@@ -424,9 +434,10 @@ public class MissionViewModel extends AndroidViewModel {
             float savedSpawn = prefs.getFloat(KEY_SPAWN, 90f);
 
             next = new Mission(UUID.randomUUID().toString(), name,
-                Collections.emptyList(), Collections.emptyList(),
+                new ArrayList<>(), new ArrayList<>(),
                 null, null, null, null, 1, 0, Mission.SimulationState.IDLE, color,
-                savedLives, savedSpeed, savedAltitude, savedSpawn);
+                savedLives, savedSpeed, savedAltitude, savedSpawn,
+                null, null, null, false);
         }
         missionData.postValue(next);
         executor.execute(() -> {

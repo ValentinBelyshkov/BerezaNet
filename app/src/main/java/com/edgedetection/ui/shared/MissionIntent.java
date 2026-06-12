@@ -147,4 +147,17 @@ public abstract class MissionIntent {
         public final float spawnIntervalSeconds;
         public SetSpawnInterval(float spawnIntervalSeconds) { this.spawnIntervalSeconds = spawnIntervalSeconds; }
     }
+
+    // === Manual GPS Position ===
+    public static final class SetManualUserPosition extends MissionIntent {
+        public final double lat, lon, altAmsl;
+        public SetManualUserPosition(double lat, double lon, double altAmsl) {
+            this.lat = lat; this.lon = lon; this.altAmsl = altAmsl;
+        }
+    }
+
+    public static final class SetUseManualGps extends MissionIntent {
+        public final boolean use;
+        public SetUseManualGps(boolean use) { this.use = use; }
+    }
 }

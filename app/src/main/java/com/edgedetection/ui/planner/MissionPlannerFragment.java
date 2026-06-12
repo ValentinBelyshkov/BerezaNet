@@ -58,6 +58,7 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import org.maplibre.android.annotations.IconFactory;
 import org.maplibre.android.annotations.Marker;
@@ -80,6 +81,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
     private MissionViewModel missionVm;
     private org.maplibre.android.annotations.Icon droneIcon;
+    
     // Views
     private MapView mapView;
     private MapLibreMap mapLibreMap;
@@ -92,11 +94,16 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private MaterialButton btnDeletePoint;
     private AutoCompleteTextView dropdownRoutes;
     private TextView tvDroneCount, tvPointLat, tvPointLon, tvShotDown, tvSimStatus;
+    
+    private SwitchMaterial switchManualGps;
+    private MaterialButton btnSetUserPos;
 
     // State
     private boolean isCreatingRoute = false;
+    private boolean isSettingUserPos = false;
     private String selectedWaypointId = null;
     private final List<Marker> markers = new ArrayList<>();
+    private Marker userMarker = null;
     private final List<Marker> simMarkers = new ArrayList<>();
     private final java.util.Map<Integer, org.maplibre.android.annotations.Icon> iconCache = new java.util.HashMap<>();
     private Polyline routePolyline;
@@ -165,6 +172,9 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         tvPointLon = root.findViewById(R.id.tv_point_lon);
         tvShotDown = root.findViewById(R.id.tv_shotdown_count);
         tvSimStatus = root.findViewById(R.id.tv_sim_status);
+        
+        switchManualGps = root.findViewById(R.id.switch_manual_gps);
+        btnSetUserPos = root.findViewById(R.id.btn_set_user_pos);
 
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(this);
@@ -183,6 +193,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         setupDeletePoint();
         setupSimulationControls();
         setupRouteDropdown();
+        setupManualGpsControls();
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::onMissionChanged);
         missionVm.getAllMissions().observe(getViewLifecycleOwner(), this::onMissionsListChanged);
@@ -228,6 +239,14 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 Toast.makeText(requireContext(), "Точка добавлена", Toast.LENGTH_SHORT).show();
                 return true;
             }
+            if (isSettingUserPos) {
+                double alt = 0;
+                if (lastUserLocation != null) alt = lastUserLocation.getAltitude();
+                missionVm.dispatch(new MissionIntent.SetManualUserPosition(latLng.getLatitude(), latLng.getLongitude(), alt));
+                isSettingUserPos = false;
+                btnSetUserPos.setText("Указать позицию");
+                return true;
+            }
             rightPanel.setVisibility(View.GONE);
             selectedWaypointId = null;
             return false;
@@ -258,6 +277,8 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         btnCreateFinish.setOnClickListener(v -> {
             if (!isCreatingRoute) {
                 isCreatingRoute = true;
+                isSettingUserPos = false;
+                btnSetUserPos.setText("Указать позицию");
                 btnCreateFinish.setText("Закончить");
                 btnDeleteRoute.setVisibility(View.GONE);
                 rightPanel.setVisibility(View.GONE);
@@ -274,6 +295,26 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 btnDeleteRoute.setVisibility(View.VISIBLE);
             }
             updateDropdown(missionVm.getMissionState().getValue());
+        });
+    }
+    
+    private void setupManualGpsControls() {
+        switchManualGps.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            missionVm.dispatch(new MissionIntent.SetUseManualGps(isChecked));
+            btnSetUserPos.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+        
+        btnSetUserPos.setOnClickListener(v -> {
+            if (!isSettingUserPos) {
+                isSettingUserPos = true;
+                isCreatingRoute = false;
+                btnCreateFinish.setText("Создать");
+                btnSetUserPos.setText("ОТМЕНА");
+                Toast.makeText(requireContext(), "Выберите свою позицию на карте", Toast.LENGTH_SHORT).show();
+            } else {
+                isSettingUserPos = false;
+                btnSetUserPos.setText("Указать позицию");
+            }
         });
     }
 
@@ -583,6 +624,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         updateMarkers(mission);
         updateRouteLine(mission);
         updateDropdown(mission);
+        updateUserMarker(mission);
 
         // 5. Кнопка удаления маршрута
         boolean hasRoute = !mission.waypoints.isEmpty();
@@ -601,6 +643,10 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 selectedWaypointId = null;
             }
         }
+        
+        // 7. GPS Override UI
+        switchManualGps.setChecked(mission.useManualGps);
+        btnSetUserPos.setVisibility(mission.useManualGps ? View.VISIBLE : View.GONE);
     }
 
     private void updateMarkers(Mission mission) {
@@ -617,6 +663,20 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                     .icon(icon)
                     .snippet(wp.id));
             markers.add(m);
+        }
+    }
+
+    private void updateUserMarker(Mission mission) {
+        if (mapLibreMap == null) return;
+        if (userMarker != null) {
+            mapLibreMap.removeMarker(userMarker);
+            userMarker = null;
+        }
+        if (mission.useManualGps && mission.userLatitude != null && mission.userLongitude != null) {
+            userMarker = mapLibreMap.addMarker(new MarkerOptions()
+                    .position(new LatLng(mission.userLatitude, mission.userLongitude))
+                    .title("Моя позиция (Ручная)")
+                    .icon(getIconForColor(0xFF0000FF)));
         }
     }
 
@@ -761,6 +821,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         if (mapLibreMap != null) {
             for (Marker m : markers) mapLibreMap.removeMarker(m);
             for (Marker m : simMarkers) mapLibreMap.removeMarker(m);
+            if (userMarker != null) mapLibreMap.removeMarker(userMarker);
         }
         mapView.onDestroy();
     }
