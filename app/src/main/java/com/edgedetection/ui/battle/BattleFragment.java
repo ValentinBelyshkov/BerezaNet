@@ -9,8 +9,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.view.Choreographer;
 import android.view.LayoutInflater;
 import android.view.SurfaceView;
@@ -36,7 +34,6 @@ import com.edgedetection.R;
 import com.edgedetection.EdgeDetector;
 import com.edgedetection.core.camera.CameraManager;
 import com.edgedetection.core.camera.CameraSource;
-import com.edgedetection.core.camera.ExternalCameraSource;
 import com.edgedetection.core.camera.InternalCameraSource;
 import com.edgedetection.core.camera.RtspCameraSource;
 import com.edgedetection.domain.ballistics.CalibrationPoint;
@@ -86,8 +83,7 @@ public class BattleFragment extends Fragment {
     private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
     private long lastLogTime = 0;
 
-    private static final String PREFS_CAMERA = "camera_prefs";
-    private static final String KEY_RTSP_URL = "rtsp_url";
+    private static final String RTSP_URL = "rtsp://192.168.42.1:8554/video";
 
     // --- Views ---
     private EdgeDetectionGLView glView;
@@ -384,14 +380,7 @@ public class BattleFragment extends Fragment {
         if (cameraManager == null) {
             CameraSource internal = new InternalCameraSource(requireContext(), getViewLifecycleOwner(), previewView, cameraExecutor);
 
-            SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_CAMERA, Context.MODE_PRIVATE);
-            String rtspUrl = prefs.getString(KEY_RTSP_URL, "");
-            CameraSource external;
-            if (rtspUrl != null && !rtspUrl.isEmpty()) {
-                external = new RtspCameraSource(requireContext(), rtspTextureView, rtspUrl);
-            } else {
-                external = new ExternalCameraSource();
-            }
+            CameraSource external = new RtspCameraSource(requireContext(), rtspTextureView, RTSP_URL);
 
             cameraManager = new CameraManager(internal, external);
 
@@ -415,8 +404,6 @@ public class BattleFragment extends Fragment {
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_CAMERA, Context.MODE_PRIVATE);
-                String rtspUrl = prefs.getString(KEY_RTSP_URL, "");
                 CameraSource.CameraSourceListener listener = new CameraSource.CameraSourceListener() {
                     @Override
                     public void onFrame(androidx.camera.core.ImageProxy image) {

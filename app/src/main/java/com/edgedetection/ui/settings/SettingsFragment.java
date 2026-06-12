@@ -1,17 +1,11 @@
 package com.edgedetection.ui.settings;
 
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -25,14 +19,9 @@ import com.edgedetection.ui.shared.MissionViewModel;
 
 public class SettingsFragment extends Fragment {
 
-    private static final String PREFS_CAMERA = "camera_prefs";
-    private static final String KEY_RTSP_URL = "rtsp_url";
-
     private MissionViewModel missionVm;
     private TextView tvLives, tvSpeed, tvAltitude, tvSpawnInterval;
     private SeekBar sbLives, sbSpeed, sbAltitude, sbSpawnInterval;
-    private EditText etRtspUrl;
-    private Button btnSaveRtsp;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -59,23 +48,6 @@ public class SettingsFragment extends Fragment {
         sbSpeed = view.findViewById(R.id.sb_speed);
         sbAltitude = view.findViewById(R.id.sb_altitude);
         sbSpawnInterval = view.findViewById(R.id.sb_spawn_interval);
-
-        etRtspUrl = view.findViewById(R.id.et_rtsp_url);
-        btnSaveRtsp = view.findViewById(R.id.btn_save_rtsp);
-
-        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_CAMERA, Context.MODE_PRIVATE);
-        String savedUrl = prefs.getString(KEY_RTSP_URL, "");
-        if (!TextUtils.isEmpty(savedUrl)) {
-            etRtspUrl.setText(savedUrl);
-        }
-
-        btnSaveRtsp.setOnClickListener(v -> {
-            String url = etRtspUrl.getText() != null ? etRtspUrl.getText().toString().trim() : "";
-            prefs.edit().putString(KEY_RTSP_URL, url).apply();
-            Toast.makeText(requireContext(),
-                    TextUtils.isEmpty(url) ? "RTSP URL очищен" : "RTSP URL сохранён",
-                    Toast.LENGTH_SHORT).show();
-        });
 
         missionVm.getMissionState().observe(getViewLifecycleOwner(), this::updateUi);
 

@@ -15,42 +15,6 @@
         android:layout_marginBottom="24dp"
         android:textColor="#333333"/>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="8dp"
-        android:layout_marginBottom="16dp"
-        android:background="#E8E8E8">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="RTSP URL камеры (для внешней камеры)"
-            android:textSize="14sp"
-            android:textColor="#333333"
-            android:layout_marginBottom="4dp"/>
-
-        <EditText
-            android:id="@+id/et_rtsp_url"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="rtsp://192.168.1.1:554/stream"
-            android:inputType="textUri"
-            android:textSize="13sp"
-            android:textColor="#111111"
-            android:background="#FFFFFF"
-            android:padding="8dp"
-            android:singleLine="true"/>
-
-        <Button
-            android:id="@+id/btn_save_rtsp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Сохранить"
-            android:layout_marginTop="8dp"/>
-
-    </LinearLayout>
 
     <GridLayout
         android:layout_width="match_parent"
