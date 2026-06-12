@@ -92,6 +92,7 @@ public class BattleFragment extends Fragment {
     private BulletTrajectoryView bulletOverlay;
     private ImageView calibrationMarker;
     private TextView vitInfoText;
+    private TextView rtspStatusView;
     private Button calibrateButton;
     private Button toggleEdgesButton;
     private Button compassCubesButton;
@@ -213,6 +214,7 @@ public class BattleFragment extends Fragment {
         compassCubesButton = view.findViewById(R.id.compass_cubes_button);
         simulationButton = view.findViewById(R.id.simulation_button);
         compassCubeOverlay = view.findViewById(R.id.compass_cube_overlay);
+        rtspStatusView = view.findViewById(R.id.rtsp_status);
 
         simulationButton.setOnClickListener(v -> {
             Mission currentMission = missionVm.getMissionState().getValue();
@@ -380,9 +382,17 @@ public class BattleFragment extends Fragment {
         if (cameraManager == null) {
             CameraSource internal = new InternalCameraSource(requireContext(), getViewLifecycleOwner(), previewView, cameraExecutor);
 
-            CameraSource external = new RtspCameraSource(requireContext(), rtspTextureView, RTSP_URL);
+            RtspCameraSource rtspSource = new RtspCameraSource(requireContext(), rtspTextureView, RTSP_URL);
+            rtspSource.setStatusListener((status, attempt) -> updateRtspStatus(status, attempt));
 
-            cameraManager = new CameraManager(internal, external);
+            cameraManager = new CameraManager(internal, rtspSource);
+
+            cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
+                boolean isRtsp = source instanceof RtspCameraSource;
+                if (rtspStatusView != null) {
+                    rtspStatusView.setVisibility(isRtsp ? View.VISIBLE : View.GONE);
+                }
+            });
 
             CameraSource.CameraSourceListener listener = new CameraSource.CameraSourceListener() {
                 @Override
@@ -417,6 +427,24 @@ public class BattleFragment extends Fragment {
                 };
                 current.start(listener);
             }
+        }
+    }
+
+    private void updateRtspStatus(RtspCameraSource.Status status, int attempt) {
+        if (rtspStatusView == null) return;
+        switch (status) {
+            case CONNECTING:
+                rtspStatusView.setText("● RTSP: подключение...");
+                rtspStatusView.setTextColor(0xFFFFAA00);
+                break;
+            case ONLINE:
+                rtspStatusView.setText("● RTSP: онлайн");
+                rtspStatusView.setTextColor(0xFF00FF44);
+                break;
+            case RECONNECTING:
+                rtspStatusView.setText("● RTSP: попытка " + attempt + "...");
+                rtspStatusView.setTextColor(0xFFFF4444);
+                break;
         }
     }
 

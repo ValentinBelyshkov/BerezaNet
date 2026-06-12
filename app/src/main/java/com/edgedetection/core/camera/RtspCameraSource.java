@@ -25,6 +25,16 @@ public class RtspCameraSource implements CameraSource {
     private static final long RECONNECT_DELAY_MAX_MS = 30_000;
     private static final long WATCHDOG_TIMEOUT_MS = 5_000;
 
+    public enum Status {
+        CONNECTING,
+        ONLINE,
+        RECONNECTING
+    }
+
+    public interface StatusListener {
+        void onStatusChanged(Status status, int attempt);
+    }
+
     private final Context context;
     private final TextureView textureView;
     private final String rtspUrl;
@@ -32,6 +42,7 @@ public class RtspCameraSource implements CameraSource {
 
     private ExoPlayer player;
     private CameraSourceListener listener;
+    private StatusListener statusListener;
     private volatile boolean isRunning = false;
     private volatile boolean isConnected = false;
 
@@ -101,6 +112,16 @@ public class RtspCameraSource implements CameraSource {
         this.mainHandler = new Handler(context.getMainLooper());
     }
 
+    public void setStatusListener(StatusListener listener) {
+        this.statusListener = listener;
+    }
+
+    private void notifyStatus(Status status) {
+        if (statusListener != null) {
+            mainHandler.post(() -> statusListener.onStatusChanged(status, reconnectAttempt));
+        }
+    }
+
     @OptIn(markerClass = UnstableApi.class)
     @Override
     public void start(CameraSourceListener listener) {
@@ -113,6 +134,7 @@ public class RtspCameraSource implements CameraSource {
         frameThread.start();
         frameHandler = new Handler(frameThread.getLooper());
 
+        notifyStatus(Status.CONNECTING);
         mainHandler.post(this::createPlayer);
     }
 
@@ -138,6 +160,7 @@ public class RtspCameraSource implements CameraSource {
                         isConnected = true;
                         reconnectAttempt = 0;
                         lastFrameTimeMs = System.currentTimeMillis();
+                        notifyStatus(Status.ONLINE);
                         frameHandler.removeCallbacks(frameCaptureRunnable);
                         frameHandler.post(frameCaptureRunnable);
                         frameHandler.removeCallbacks(watchdogRunnable);
@@ -179,6 +202,7 @@ public class RtspCameraSource implements CameraSource {
         long delay = Math.min(RECONNECT_DELAY_BASE_MS * (1L << reconnectAttempt), RECONNECT_DELAY_MAX_MS);
         reconnectAttempt++;
         Log.i(TAG, "Scheduling reconnect in " + delay + "ms (attempt " + reconnectAttempt + ")");
+        notifyStatus(Status.RECONNECTING);
         frameHandler.postDelayed(reconnectRunnable, delay);
     }
 
