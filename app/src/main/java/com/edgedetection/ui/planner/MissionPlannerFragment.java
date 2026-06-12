@@ -81,7 +81,7 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
 
     private MissionViewModel missionVm;
     private org.maplibre.android.annotations.Icon droneIcon;
-    
+
     // Views
     private MapView mapView;
     private MapLibreMap mapLibreMap;
@@ -94,9 +94,10 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
     private MaterialButton btnDeletePoint;
     private AutoCompleteTextView dropdownRoutes;
     private TextView tvDroneCount, tvPointLat, tvPointLon, tvShotDown, tvSimStatus;
-    
+
     private SwitchMaterial switchManualGps;
     private MaterialButton btnSetUserPos;
+    private TextView tvManualGpsCoords;
 
     // State
     private boolean isCreatingRoute = false;
@@ -172,9 +173,10 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
         tvPointLon = root.findViewById(R.id.tv_point_lon);
         tvShotDown = root.findViewById(R.id.tv_shotdown_count);
         tvSimStatus = root.findViewById(R.id.tv_sim_status);
-        
+
         switchManualGps = root.findViewById(R.id.switch_manual_gps);
         btnSetUserPos = root.findViewById(R.id.btn_set_user_pos);
+        tvManualGpsCoords = root.findViewById(R.id.tv_manual_gps_coords);
 
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(this);
@@ -297,13 +299,13 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
             updateDropdown(missionVm.getMissionState().getValue());
         });
     }
-    
+
     private void setupManualGpsControls() {
         switchManualGps.setOnCheckedChangeListener((buttonView, isChecked) -> {
             missionVm.dispatch(new MissionIntent.SetUseManualGps(isChecked));
             btnSetUserPos.setVisibility(isChecked ? View.VISIBLE : View.GONE);
         });
-        
+
         btnSetUserPos.setOnClickListener(v -> {
             if (!isSettingUserPos) {
                 isSettingUserPos = true;
@@ -643,10 +645,17 @@ public class MissionPlannerFragment extends Fragment implements OnMapReadyCallba
                 selectedWaypointId = null;
             }
         }
-        
+
         // 7. GPS Override UI
         switchManualGps.setChecked(mission.useManualGps);
         btnSetUserPos.setVisibility(mission.useManualGps ? View.VISIBLE : View.GONE);
+        if (mission.useManualGps && mission.userLatitude != null && mission.userLongitude != null) {
+            tvManualGpsCoords.setVisibility(View.VISIBLE);
+            tvManualGpsCoords.setText(String.format(java.util.Locale.US,
+                    "📍 %.5f\n    %.5f", mission.userLatitude, mission.userLongitude));
+        } else {
+            tvManualGpsCoords.setVisibility(View.GONE);
+        }
     }
 
     private void updateMarkers(Mission mission) {

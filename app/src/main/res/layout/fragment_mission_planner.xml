@@ -1,366 +1,377 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout
-xmlns:android="http://schemas.android.com/apk/res/android"
-xmlns:app="http://schemas.android.com/apk/res-auto"
-android:layout_width="match_parent"
-android:layout_height="match_parent">
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
-<!-- Левая панель в ScrollView -->
-<androidx.core.widget.NestedScrollView
-    android:id="@+id/left_scroll"
-    android:layout_width="wrap_content"
-    android:layout_height="0dp"
-    app:layout_constraintStart_toStartOf="parent"
-    app:layout_constraintTop_toTopOf="parent"
-    app:layout_constraintBottom_toBottomOf="parent">
+    <!-- Левая панель в ScrollView -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/left_scroll"
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-    <LinearLayout
-        android:id="@+id/left_panel"
-        android:layout_width="160dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="6dp"
-        android:background="?attr/colorSurface">
-
-        <!-- === ПАНЕЛЬ СИМУЛЯЦИИ === -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:id="@+id/left_panel"
+            android:layout_width="160dp"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="8dp"
-            app:cardBackgroundColor="?attr/colorPrimaryContainer">
+            android:orientation="vertical"
+            android:padding="6dp"
+            android:background="?attr/colorSurface">
 
-            <LinearLayout
+            <!-- === ПАНЕЛЬ СИМУЛЯЦИИ === -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="6dp">
-
-                <TextView
-                    android:id="@+id/tv_sim_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="СИМУЛЯЦИЯ (остановлена)"
-                    android:textAppearance="?attr/textAppearanceCaption"
-                    android:textStyle="bold" />
+                app:cardCornerRadius="8dp"
+                app:cardBackgroundColor="?attr/colorPrimaryContainer">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:orientation="vertical"
+                    android:padding="6dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_sim_start"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/tv_sim_status"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="▶"
-                        android:textColor="#4CAF50" />
+                        android:text="СИМУЛЯЦИЯ (остановлена)"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textStyle="bold" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_sim_pause"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:layout_width="0dp"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="⏸"
-                        android:textColor="#FFC107" />
+                        android:orientation="horizontal">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_sim_stop"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="⏹"
-                        android:textColor="#F44336" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sim_start"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="▶"
+                            android:textColor="#4CAF50" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sim_pause"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⏸"
+                            android:textColor="#FFC107" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sim_stop"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⏹"
+                            android:textColor="#F44336" />
+                    </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            </com.google.android.material.card.MaterialCardView>
 
-        <!-- === GPS OVERRIDE === -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="2dp">
-
-            <LinearLayout
+            <!-- === GPS OVERRIDE === -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="6dp">
+                android:layout_marginTop="6dp"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="2dp">
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_manual_gps"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Своё GPS"
+                    android:orientation="vertical"
+                    android:padding="6dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_manual_gps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Ручная точка"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_set_user_pos"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Указать позицию"
+                        android:textSize="10sp"
+                        android:padding="0dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tv_manual_gps_coords"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text=""
+                        android:textSize="9sp"
+                        android:textColor="?attr/colorOnSurface"
+                        android:alpha="0.7"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- === СЧЁТЧИК СБИТЫХ === -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                app:cardCornerRadius="8dp"
+                app:cardBackgroundColor="#CC000000">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="СБИТО"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp"
+                        android:alpha="0.7" />
+
+                    <TextView
+                        android:id="@+id/tv_shotdown_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#FF5252"
+                        android:textSize="28sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Разделитель -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginVertical="8dp"
+                android:background="#1F000000" />
+
+            <!-- === 2D/3D === -->
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/view_mode_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                app:singleSelection="true"
+                app:checkedButton="@id/btn_mode_2d">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_mode_2d"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2D"
                     android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_set_user_pos"
+                    android:id="@+id/btn_mode_3d"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3D"
+                    android:textSize="12sp" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <!-- === МАРШРУТ === -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/til_route_select"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:hint="Маршрут">
+
+                <AutoCompleteTextView
+                    android:id="@+id/dropdown_routes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Указать позицию"
-                    android:textSize="10sp"
-                    android:padding="0dp"
-                    android:visibility="gone" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+                    android:inputType="none"
+                    android:textColor="@color/black"
+                    android:textSize="12sp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- === СЧЁТЧИК СБИТЫХ === -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            app:cardCornerRadius="8dp"
-            app:cardBackgroundColor="#CC000000">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_create_finish"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Создать"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_delete_route"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Удалить"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!-- === КОЛ-ВО БПЛА === -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Кол-во БПЛА"
+                android:textAppearance="?attr/textAppearanceCaption" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="8dp"
+                android:orientation="horizontal"
                 android:gravity="center">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="СБИТО"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:alpha="0.7" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_drone_minus"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="−"
+                    android:textSize="16sp" />
 
                 <TextView
-                    android:id="@+id/tv_shotdown_count"
+                    android:id="@+id/tv_drone_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textColor="#FF5252"
-                    android:textSize="28sp"
-                    android:textStyle="bold" />
+                    android:minWidth="32dp"
+                    android:gravity="center"
+                    android:text="1"
+                    android:textColor="@color/black"
+                    android:textAppearance="?attr/textAppearanceHeadline6" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_drone_plus"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="+"
+                    android:textSize="16sp" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Разделитель -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginVertical="8dp"
-            android:background="#1F000000" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
-        <!-- === 2D/3D === -->
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/view_mode_toggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            app:singleSelection="true"
-            app:checkedButton="@id/btn_mode_2d">
-
+            <!-- === СТАРТ ТРЕНИРОВКИ === -->
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mode_2d"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="2D"
-                android:textSize="12sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mode_3d"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3D"
-                android:textSize="12sp" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
-
-        <!-- === МАРШРУТ === -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/til_route_select"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:hint="Маршрут">
-
-            <AutoCompleteTextView
-                android:id="@+id/dropdown_routes"
+                android:id="@+id/btn_start"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="none"
-                android:textColor="@color/black"
-                android:textSize="12sp" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:text="СТАРТ"
+                android:textSize="12sp"
+                app:backgroundTint="?attr/colorPrimary" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_create_finish"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="Создать"
-            android:textSize="12sp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_delete_route"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Удалить"
-            android:textSize="12sp"
-            android:visibility="gone" />
+    <!-- Центр: Карта 2D -->
+    <org.maplibre.android.maps.MapView
+        android:id="@+id/planner_map_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintStart_toEndOf="@id/left_scroll"
+        app:layout_constraintEnd_toStartOf="@id/right_panel"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
-        <!-- === КОЛ-ВО БПЛА === -->
+    <!-- Центр: 3D View (скрыт) -->
+    <FrameLayout
+        android:id="@+id/planner_3d_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintStart_toEndOf="@id/left_scroll"
+        app:layout_constraintEnd_toStartOf="@id/right_panel"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- Правая панель точки -->
+    <LinearLayout
+        android:id="@+id/right_panel"
+        android:layout_width="110dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:layout_margin="8dp"
+        android:background="#CC000000"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Кол-во БПЛА"
+            android:text="Точка"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Lat"
+            android:textColor="#FFFFFF"
+            android:alpha="0.7"
             android:textAppearance="?attr/textAppearanceCaption" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/tv_point_lat"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:text="—"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_drone_minus"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:text="−"
-                android:textSize="16sp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Lon"
+            android:textColor="#FFFFFF"
+            android:alpha="0.7"
+            android:textAppearance="?attr/textAppearanceCaption" />
 
-            <TextView
-                android:id="@+id/tv_drone_count"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="32dp"
-                android:gravity="center"
-                android:text="1"
-                android:textColor="@color/black"
-                android:textAppearance="?attr/textAppearanceHeadline6" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_drone_plus"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:text="+"
-                android:textSize="16sp" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/tv_point_lon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_height="16dp" />
 
-        <!-- === СТАРТ ТРЕНИРОВКИ === -->
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_start"
+            android:id="@+id/btn_delete_point"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="СТАРТ"
-            android:textSize="12sp"
-            app:backgroundTint="?attr/colorPrimary" />
-
+            android:text="Удалить"
+            android:textSize="11sp"
+            android:textColor="#FF5252"
+            app:rippleColor="#44FF5252" />
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
-
-<!-- Центр: Карта 2D -->
-<org.maplibre.android.maps.MapView
-    android:id="@+id/planner_map_view"
-    android:layout_width="0dp"
-    android:layout_height="0dp"
-    app:layout_constraintStart_toEndOf="@id/left_scroll"
-    app:layout_constraintEnd_toStartOf="@id/right_panel"
-    app:layout_constraintTop_toTopOf="parent"
-    app:layout_constraintBottom_toBottomOf="parent" />
-
-<!-- Центр: 3D View (скрыт) -->
-<FrameLayout
-    android:id="@+id/planner_3d_container"
-    android:layout_width="0dp"
-    android:layout_height="0dp"
-    android:visibility="gone"
-    app:layout_constraintStart_toEndOf="@id/left_scroll"
-    app:layout_constraintEnd_toStartOf="@id/right_panel"
-    app:layout_constraintTop_toTopOf="parent"
-    app:layout_constraintBottom_toBottomOf="parent" />
-
-<!-- Правая панель точки -->
-<LinearLayout
-    android:id="@+id/right_panel"
-    android:layout_width="110dp"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="8dp"
-    android:layout_margin="8dp"
-    android:background="#CC000000"
-    android:visibility="gone"
-    app:layout_constraintEnd_toEndOf="parent"
-    app:layout_constraintTop_toTopOf="parent">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Точка"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Lat"
-        android:textColor="#FFFFFF"
-        android:alpha="0.7"
-        android:textAppearance="?attr/textAppearanceCaption" />
-
-    <TextView
-        android:id="@+id/tv_point_lat"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="—"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Lon"
-        android:textColor="#FFFFFF"
-        android:alpha="0.7"
-        android:textAppearance="?attr/textAppearanceCaption" />
-
-    <TextView
-        android:id="@+id/tv_point_lon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="—"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="16dp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_delete_point"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Удалить"
-        android:textSize="11sp"
-        android:textColor="#FF5252"
-        app:rippleColor="#44FF5252" />
-</LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

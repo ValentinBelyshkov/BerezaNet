@@ -77,7 +77,7 @@ public class BattleFragment extends Fragment {
     private ExecutorService cameraExecutor;
     private Handler imuHandler;
     private Handler calibrationHandler;
-    
+
     private volatile float lastGyroX = 0f, lastGyroY = 0f, lastGyroZ = 0f;
     private volatile long lastGyroTimestampNs = 0;
     private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
@@ -190,11 +190,11 @@ public class BattleFragment extends Fragment {
         initViews(view);
         setupObservers();
 
-        sceneRenderer = new BattleSceneRenderer(requireContext(), 
-                view.findViewById(R.id.ar_overlay), 
-                view.findViewById(R.id.offscreen_indicator), 
+        sceneRenderer = new BattleSceneRenderer(requireContext(),
+                view.findViewById(R.id.ar_overlay),
+                view.findViewById(R.id.offscreen_indicator),
                 view.findViewById(R.id.gps_warning));
-        
+
         frameProcessor = new BattleFrameProcessor(requireContext(), viewModel, glView, TARGET_WIDTH_M, TARGET_LENGTH_M);
 
         checkPermissions();
@@ -462,8 +462,23 @@ public class BattleFragment extends Fragment {
         sceneRenderer.updateCamera(fx, fy, fz, ux, uy, uz);
 
         double refLat, refLon, refAlt;
-        if (locationManager.hasUserLocation()) {
+        Mission currentMission = missionVm.getMissionState().getValue();
+        boolean usingManualGps = currentMission != null
+                && currentMission.useManualGps
+                && currentMission.userLatitude != null
+                && currentMission.userLongitude != null;
+
+        if (usingManualGps) {
+            refLat = currentMission.userLatitude;
+            refLon = currentMission.userLongitude;
+            refAlt = currentMission.userAltitudeAmsl != null ? currentMission.userAltitudeAmsl : 0.0;
+            if (gpsWarning != null) {
+                gpsWarning.setVisibility(View.VISIBLE);
+                gpsWarning.setText("GPS: ручная точка");
+            }
+        } else if (locationManager.hasUserLocation()) {
             refLat = locationManager.getUserLat(); refLon = locationManager.getUserLon(); refAlt = locationManager.getUserAlt();
+            if (gpsWarning != null) gpsWarning.setVisibility(View.GONE);
         } else if (hasMissionOrigin) {
             refLat = missionOriginLat; refLon = missionOriginLon; refAlt = missionOriginAlt;
             if (gpsWarning != null) {
@@ -474,7 +489,7 @@ public class BattleFragment extends Fragment {
             refLat = 0; refLon = 0; refAlt = 0;
         }
 
-sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
+        sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
         // --- Drone velocity + lead point ---
         if (simulationActive && hasDronePosition && sceneRenderer.hasRelativePosition()) {
             float cx = sceneRenderer.getLastDroneX();
@@ -500,10 +515,10 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
             }
             if (bulletOverlay != null) {
                 bulletOverlay.setLeadPoint(
-                    sceneRenderer.getLastDroneX() + droneVelFilX * LEAD_TIME_SEC,
-                    sceneRenderer.getLastDroneY() + droneVelFilY * LEAD_TIME_SEC,
-                    sceneRenderer.getLastDroneZ() + droneVelFilZ * LEAD_TIME_SEC,
-                    true
+                        sceneRenderer.getLastDroneX() + droneVelFilX * LEAD_TIME_SEC,
+                        sceneRenderer.getLastDroneY() + droneVelFilY * LEAD_TIME_SEC,
+                        sceneRenderer.getLastDroneZ() + droneVelFilZ * LEAD_TIME_SEC,
+                        true
                 );
             }
         } else {
@@ -516,10 +531,10 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
         if (now - lastLogTime > 1000 && sceneRenderer.hasRelativePosition()) {
             lastLogTime = now;
             double[] enu = com.edgedetection.domain.geo.GeoUtils.ecefToEnu(refLat, refLon, refAlt, droneLat, droneLon, droneAlt);
-            BattleLogger.logState(fx, fy, fz, ux, uy, uz, refLat, refLon, refAlt, enu, 
-                sceneRenderer.getLastDroneX(), sceneRenderer.getLastDroneY(), sceneRenderer.getLastDroneZ(),
-                droneLat, droneLon, droneAlt, sensorProvider.getLastRotationVector(), sensorProvider.getRotationMatrix(),
-                sceneRenderer.getArRenderer(), sceneRenderer.isDroneVisible(fx, fy, fz, ux, uy, uz));
+            BattleLogger.logState(fx, fy, fz, ux, uy, uz, refLat, refLon, refAlt, enu,
+                    sceneRenderer.getLastDroneX(), sceneRenderer.getLastDroneY(), sceneRenderer.getLastDroneZ(),
+                    droneLat, droneLon, droneAlt, sensorProvider.getLastRotationVector(), sensorProvider.getRotationMatrix(),
+                    sceneRenderer.getArRenderer(), sceneRenderer.isDroneVisible(fx, fy, fz, ux, uy, uz));
         }
 
         if (dt > 0 && dt < 0.5f) {
@@ -556,13 +571,13 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
     private void updateVITInfo() {
         if (vitInfoText == null || frameProcessor == null) return;
         VITTracker.TargetState ts = frameProcessor.getLastTargetState();
-        
+
         StringBuilder sb = new StringBuilder();
         sb.append("=== CAMERA ===\n");
         sb.append(String.format("Pitch: %7.2f (Rate: %6.1f deg/s)\n", lastPitch, Math.toDegrees(lastGyroX)));
         sb.append(String.format("Yaw:   %7.2f (Rate: %6.1f deg/s)\n", lastYaw, Math.toDegrees(lastGyroY)));
         sb.append(String.format("Roll:  %7.2f (Rate: %6.1f deg/s)\n", lastRoll, Math.toDegrees(lastGyroZ)));
-        
+
         sb.append("\n=== TRACKER ===\n");
         if (ts != null && ts.detected) {
             sb.append(String.format("Blob: x=%.0f y=%.0f\n", ts.bboxX + ts.bboxW/2f, ts.bboxY + ts.bboxH/2f));
@@ -571,7 +586,7 @@ sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, dr
         } else {
             sb.append("ПОИСК...");
         }
-        
+
         vitInfoText.setText(sb.toString());
     }
 
