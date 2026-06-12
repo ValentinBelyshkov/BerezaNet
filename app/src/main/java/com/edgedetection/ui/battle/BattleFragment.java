@@ -86,6 +86,7 @@ public class BattleFragment extends Fragment {
     private TextView vitInfoText;
     private Button calibrateButton;
     private Button toggleEdgesButton;
+    private Button cardinalCubesButton;
     private TextView gpsWarning;
 
     // --- Simulation state ---
@@ -95,6 +96,7 @@ public class BattleFragment extends Fragment {
     private volatile boolean simulationPaused = false;
     private volatile boolean hasDronePosition = false;
     private volatile int currentDroneIndex = -1;
+    private boolean cardinalCubesVisible = false;
     private double missionOriginLat, missionOriginLon, missionOriginAlt;
     private boolean hasMissionOrigin = false;
 
@@ -187,6 +189,7 @@ public class BattleFragment extends Fragment {
         vitInfoText = view.findViewById(R.id.vit_info);
         calibrateButton = view.findViewById(R.id.calibrate_button);
         toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
+        cardinalCubesButton = view.findViewById(R.id.cardinal_cubes_button);
 
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
             ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
@@ -204,6 +207,8 @@ public class BattleFragment extends Fragment {
             if (current == null) current = false;
             viewModel.setEdgeDetectionEnabled(!current);
         });
+
+        cardinalCubesButton.setOnClickListener(v -> toggleCardinalCubes());
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
 
@@ -436,6 +441,17 @@ public class BattleFragment extends Fragment {
         }
     }
 
+    private void toggleCardinalCubes() {
+        cardinalCubesVisible = !cardinalCubesVisible;
+        if (sceneRenderer != null) {
+            sceneRenderer.setCardinalCubesVisible(cardinalCubesVisible);
+        }
+        cardinalCubesButton.setText(cardinalCubesVisible ? "Стороны света: Вкл" : "Стороны света: Выкл");
+        if (cardinalCubesVisible) {
+            Toast.makeText(requireContext(), "Синий — север, красный — восток, жёлтый — юг, зелёный — запад", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void updateCalibrationMarker(float nx, float ny) {
         if (calibrationMarker == null || getView() == null) return;
         int w = getView().getWidth();
@@ -479,7 +495,7 @@ public class BattleFragment extends Fragment {
         if (sensorProvider != null) sensorProvider.start();
         if (calibrationHandler == null) calibrationHandler = new Handler(Looper.getMainLooper());
         calibrationHandler.removeCallbacks(calibrationRunnable);
-        calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
+        calibrationHandler.post(calibrationRunnable);
         if (frameProcessor != null) frameProcessor.resetTracker();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locationManager.startLocationUpdates();

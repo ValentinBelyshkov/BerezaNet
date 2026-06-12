@@ -46,6 +46,7 @@ public class BattleSceneRenderer {
         } else {
             arRenderer.setModelVisible(false);
         }
+        arRenderer.loadCardinalCubes("models/cardinal_cubes.glb");
         arRenderer.setupEnvironmentLighting();
     }
 
@@ -188,6 +189,18 @@ public class BattleSceneRenderer {
 
     public Filament3DRenderer getArRenderer() {
         return arRenderer;
+    }
+
+    public void setCardinalCubesVisible(boolean visible) {
+        if (arRenderer != null) {
+            arRenderer.setCardinalCubesVisible(visible);
+        }
+    }
+
+    public void updateCardinalCubes(float yawRadians) {
+        if (arRenderer != null) {
+            arRenderer.updateCardinalCubes(yawRadians);
+        }
     }
 
     public float getLastDroneX() { return lastDroneX; }
