@@ -95,10 +95,6 @@ public class Filament3DRenderer {
     };
 
     private FilamentAsset mAsset;
-    private FilamentAsset mCardinalCubesAsset;
-    private int[] mCardinalCubesEntities = new int[0];
-    private boolean mCardinalCubesVisible = false;
-    private boolean mCardinalCubesLoaded = false;
     private boolean mModelLoaded = false;
     private Skybox mSkybox;
     private Texture mSkyboxTexture;
@@ -277,81 +273,6 @@ public class Filament3DRenderer {
             if (stream != null) {
                 try { stream.close(); } catch (Exception ignored) {}
             }
-        }
-    }
-
-    public void loadCardinalCubes(String assetPath) {
-        if (mDestroyed || mEngineDestroyed) return;
-        InputStream stream = null;
-        try {
-            stream = mContext.getAssets().open(assetPath);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = stream.read(buffer)) != -1) {
-                baos.write(buffer, 0, read);
-            }
-            byte[] bytes = baos.toByteArray();
-
-            mCardinalCubesAsset = mAssetLoader.createAsset(ByteBuffer.wrap(bytes));
-            if (mCardinalCubesAsset == null) {
-                mCardinalCubesLoaded = false;
-                Log.e(TAG, "Failed to load cardinal cubes: " + assetPath);
-                return;
-            }
-
-            mResourceLoader.loadResources(mCardinalCubesAsset);
-            int[] entities = mCardinalCubesAsset.getEntities();
-            mCardinalCubesEntities = entities != null ? entities.clone() : new int[0];
-            for (int entity : mCardinalCubesEntities) {
-                mScene.addEntity(entity);
-            }
-            mCardinalCubesVisible = false;
-            mCardinalCubesLoaded = true;
-            setCardinalCubesVisible(false);
-            Log.i(TAG, "Cardinal cubes loaded: " + assetPath);
-        } catch (Exception e) {
-            mCardinalCubesLoaded = false;
-            Log.e(TAG, "Cardinal cubes load error", e);
-        } finally {
-            if (stream != null) {
-                try { stream.close(); } catch (Exception ignored) {}
-            }
-        }
-    }
-
-    public void setCardinalCubesVisible(boolean visible) {
-        if (mDestroyed || mEngineDestroyed || mCardinalCubesAsset == null) return;
-        if (mCardinalCubesVisible == visible) return;
-        mCardinalCubesVisible = visible;
-        for (int entity : mCardinalCubesEntities) {
-            if (visible) {
-                mScene.addEntity(entity);
-            } else {
-                mScene.removeEntity(entity);
-            }
-        }
-    }
-
-    public boolean isCardinalCubesLoaded() {
-        return mCardinalCubesLoaded;
-    }
-
-    public void updateCardinalCubes(float yawRadians) {
-        if (mDestroyed || mEngineDestroyed || mCardinalCubesAsset == null) return;
-        float c = (float) Math.cos(yawRadians);
-        float s = (float) Math.sin(yawRadians);
-        float[] matrix = new float[]{
-                c, 0, -s, 0,
-                0, 1, 0, 0,
-                s, 0, c, 0,
-                0, 0, 0, 1
-        };
-        TransformManager tm = mEngine.getTransformManager();
-        for (int entity : mCardinalCubesEntities) {
-            int inst = tm.getInstance(entity);
-            if (inst == 0) inst = tm.create(entity);
-            tm.setTransform(inst, matrix);
         }
     }
 
@@ -766,18 +687,6 @@ public class Filament3DRenderer {
                     Log.e(TAG, "destroy asset error", e);
                 }
                 mAsset = null;
-            }
-            if (mCardinalCubesAsset != null) {
-                try {
-                    for (int entity : mCardinalCubesEntities) {
-                        mScene.removeEntity(entity);
-                    }
-                    mCardinalCubesEntities = new int[0];
-                    mAssetLoader.destroyAsset(mCardinalCubesAsset);
-                } catch (Exception e) {
-                    Log.e(TAG, "destroy cardinal cubes asset error", e);
-                }
-                mCardinalCubesAsset = null;
             }
             if (mSwapChain != null && !mEngineDestroyed) {
                 try {

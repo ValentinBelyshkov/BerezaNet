@@ -76,7 +76,6 @@ public class BattleFragment extends Fragment {
     
     private volatile float lastGyroX = 0f, lastGyroY = 0f, lastGyroZ = 0f;
     private volatile long lastGyroTimestampNs = 0;
-    private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
     private long lastLogTime = 0;
 
     // --- Views ---
@@ -99,7 +98,6 @@ public class BattleFragment extends Fragment {
     private volatile boolean simulationPaused = false;
     private volatile boolean hasDronePosition = false;
     private volatile int currentDroneIndex = -1;
-    private boolean cardinalCubesVisible = false;
     private double missionOriginLat, missionOriginLon, missionOriginAlt;
     private boolean hasMissionOrigin = false;
 
@@ -141,9 +139,6 @@ public class BattleFragment extends Fragment {
         sensorProvider = new BattleSensorProvider(requireContext(), imuHandler, new BattleSensorProvider.OnSensorChangedListener() {
             @Override
             public void onRotationMatrixUpdated(float[] rotationMatrix, float[] orientation, float initialAzimuth) {
-                lastYaw = (float) Math.toDegrees(orientation[0]);
-                lastPitch = (float) Math.toDegrees(orientation[1]);
-                lastRoll = (float) Math.toDegrees(orientation[2]);
                 scheduleFrame();
             }
 
@@ -220,8 +215,6 @@ public class BattleFragment extends Fragment {
             if (current == null) current = false;
             viewModel.setEdgeDetectionEnabled(!current);
         });
-
-        cardinalCubesButton.setOnClickListener(v -> toggleCardinalCubes());
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
 
@@ -337,13 +330,13 @@ public class BattleFragment extends Fragment {
 
             cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
                 if (source != null) {
-                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
+                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
                 }
             });
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
+                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs));
             }
         }
     }
@@ -420,23 +413,22 @@ public class BattleFragment extends Fragment {
     private void updateVITInfo() {
         if (vitInfoText == null || frameProcessor == null) return;
         VITTracker.TargetState ts = frameProcessor.getLastTargetState();
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== CAMERA ===\n");
-        sb.append(String.format("Pitch: %7.2f (Rate: %6.1f deg/s)\n", lastPitch, Math.toDegrees(lastGyroX)));
-        sb.append(String.format("Yaw:   %7.2f (Rate: %6.1f deg/s)\n", lastYaw, Math.toDegrees(lastGyroY)));
-        sb.append(String.format("Roll:  %7.2f (Rate: %6.1f deg/s)\n", lastRoll, Math.toDegrees(lastGyroZ)));
-        
-        sb.append("\n=== TRACKER ===\n");
-        if (ts != null && ts.detected) {
-            sb.append(String.format("Blob: x=%.0f y=%.0f\n", ts.bboxX + ts.bboxW/2f, ts.bboxY + ts.bboxH/2f));
-            sb.append(String.format("Size: %.1fpx\n", ts.bboxW));
-            sb.append(String.format("Conf: %.2f", ts.confidence));
-        } else {
-            sb.append("ПОИСК...");
+        if (ts == null || !ts.detected) {
+            vitInfoText.setText("VIT: поиск...");
+            return;
         }
-        
-        vitInfoText.setText(sb.toString());
+        String info = String.format(
+            "VIT: %s | D=%.0fм | V=(%.1f,%.1f,%.1f)м/с\nAz=%.1f° El=%.1f° | C=%.2f",
+            ts.tracking ? "ТРЕКИНГ" : "DETECT",
+            ts.distanceM,
+            ts.velX, ts.velY, ts.velZ,
+            ts.azimuthDeg, ts.elevationDeg,
+            ts.confidence
+        );
+        if (ts.tracking) {
+            info += String.format("\nLead: (%.1f,%.1f,%.1f)м", ts.leadX, ts.leadY, ts.leadZ);
+        }
+        vitInfoText.setText(info);
     }
 
     private void handleCalibrateClick() {
@@ -458,26 +450,6 @@ public class BattleFragment extends Fragment {
             calibrationMarker.setVisibility(View.GONE);
         } else {
             viewModel.startCalibration();
-        }
-    }
-
-    private void toggleCardinalCubes() {
-        cardinalCubesVisible = !cardinalCubesVisible;
-        if (sceneRenderer == null) {
-            cardinalCubesVisible = false;
-            cardinalCubesButton.setText("Стороны света: Выкл");
-            return;
-        }
-        if (!sceneRenderer.isCardinalCubesLoaded()) {
-            cardinalCubesVisible = false;
-            cardinalCubesButton.setText("Стороны света: Выкл");
-            Toast.makeText(requireContext(), "Кубы сторон света не загрузились", Toast.LENGTH_LONG).show();
-            return;
-        }
-        sceneRenderer.setCardinalCubesVisible(cardinalCubesVisible);
-        cardinalCubesButton.setText(cardinalCubesVisible ? "Стороны света: Вкл" : "Стороны света: Выкл");
-        if (cardinalCubesVisible) {
-            Toast.makeText(requireContext(), "Синий — север, красный — восток, жёлтый — юг, зелёный — запад", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -524,7 +496,7 @@ public class BattleFragment extends Fragment {
         if (sensorProvider != null) sensorProvider.start();
         if (calibrationHandler == null) calibrationHandler = new Handler(Looper.getMainLooper());
         calibrationHandler.removeCallbacks(calibrationRunnable);
-        calibrationHandler.post(calibrationRunnable);
+        calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
         if (frameProcessor != null) frameProcessor.resetTracker();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locationManager.startLocationUpdates();
