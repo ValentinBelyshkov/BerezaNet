@@ -104,9 +104,9 @@ android:layout_height="match_parent">
     android:text="Обработка: Выкл"
     android:contentDescription="Переключение обработки" />
 
-<!-- Кнопка сторон света -->
+<!-- Кнопка отображения сторон света (AR-кубы) -->
 <android.widget.Button
-    android:id="@+id/cardinal_cubes_button"
+    android:id="@+id/compass_cubes_button"
     android:layout_width="wrap_content"
     android:layout_height="48dp"
     android:layout_gravity="start|bottom"
@@ -117,8 +117,15 @@ android:layout_height="match_parent">
     android:textSize="14sp"
     android:paddingStart="16dp"
     android:paddingEnd="16dp"
-    android:text="Стороны света: Выкл"
-    android:contentDescription="Показать или скрыть кубы сторон света" />
+    android:text="Стороны света"
+    android:contentDescription="Стороны света" />
+
+<!-- AR-оверлей компасных кубов -->
+<com.edgedetection.ui.battle.CompassCubeOverlay
+    android:id="@+id/compass_cube_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone" />
 
 <!-- Кнопка огня -->
     <ImageButton
