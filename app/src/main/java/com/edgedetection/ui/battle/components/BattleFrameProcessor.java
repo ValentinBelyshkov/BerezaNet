@@ -33,7 +33,7 @@ public class BattleFrameProcessor {
         Log.i(TAG, "VIT Tracker init: " + vitOk);
     }
 
-    public void processFrame(ImageProxy image, float lastGyroX, float lastGyroY, float lastGyroZ, long lastGyroTimestampNs) {
+    public void processFrame(ImageProxy image, float lastGyroX, float lastGyroY, float lastGyroZ, long lastGyroTimestampNs, float pitch, float yaw, float roll) {
         try {
             int width = image.getWidth();
             int height = image.getHeight();
@@ -100,19 +100,12 @@ public class BattleFrameProcessor {
 
             // ======== VIT Tracker processing ========
             if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
-                int bufSize = rgba.width() * rgba.height() * 4;
-                ByteBuffer rgbaBuffer = ByteBuffer.allocateDirect(bufSize);
-                byte[] rgbaBytes = new byte[bufSize];
-                rgba.get(0, 0, rgbaBytes);
-                rgbaBuffer.put(rgbaBytes);
-                rgbaBuffer.position(0);
-
                 lastTargetState = vitTracker.processFrame(
-                        rgbaBuffer,
-                        rgba.width(), rgba.height(),
+                        rgba,
                         frameTimestampNs,
                         lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs,
-                        T_FLIGHT_SEC
+                        T_FLIGHT_SEC,
+                        pitch, yaw, roll
                 );
             }
 
@@ -133,6 +126,8 @@ public class BattleFrameProcessor {
             Boolean edgeEnabled = viewModel.isEdgeDetectionEnabled().getValue();
             if (edgeEnabled == null) edgeEnabled = false;
 
+            Mat finalMat = (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) ? edges : rgba;
+
             if (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) {
                 VITTracker.TargetState ts = lastTargetState;
                 EdgeDetector.detectEdgesWithReticle(
@@ -144,10 +139,13 @@ public class BattleFrameProcessor {
                         ts.detected,
                         false
                 );
-                if (glView != null) glView.updateFrame(edges);
-            } else {
-                if (glView != null) glView.updateFrame(rgba);
             }
+
+            if (vitTracker != null) {
+                vitTracker.drawOverlay(finalMat, lastTargetState, pitch, yaw, roll, lastGyroX, lastGyroY, lastGyroZ);
+            }
+
+            if (glView != null) glView.updateFrame(finalMat);
 
             rgba.release();
 
