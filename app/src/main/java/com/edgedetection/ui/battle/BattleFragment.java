@@ -98,6 +98,7 @@ public class BattleFragment extends Fragment {
     private volatile boolean simulationPaused = false;
     private volatile boolean hasDronePosition = false;
     private volatile int currentDroneIndex = -1;
+    private boolean cardinalCubesVisible = false;
     private double missionOriginLat, missionOriginLon, missionOriginAlt;
     private boolean hasMissionOrigin = false;
 
@@ -215,6 +216,8 @@ public class BattleFragment extends Fragment {
             if (current == null) current = false;
             viewModel.setEdgeDetectionEnabled(!current);
         });
+
+        cardinalCubesButton.setOnClickListener(v -> toggleCardinalCubes());
 
         calibrateButton.setOnClickListener(v -> handleCalibrateClick());
 
@@ -453,6 +456,26 @@ public class BattleFragment extends Fragment {
         }
     }
 
+    private void toggleCardinalCubes() {
+        cardinalCubesVisible = !cardinalCubesVisible;
+        if (sceneRenderer == null) {
+            cardinalCubesVisible = false;
+            cardinalCubesButton.setText("Стороны света: Выкл");
+            return;
+        }
+        if (!sceneRenderer.isCardinalCubesLoaded()) {
+            cardinalCubesVisible = false;
+            cardinalCubesButton.setText("Стороны света: Выкл");
+            Toast.makeText(requireContext(), "Кубы сторон света не загрузились", Toast.LENGTH_LONG).show();
+            return;
+        }
+        sceneRenderer.setCardinalCubesVisible(cardinalCubesVisible);
+        cardinalCubesButton.setText(cardinalCubesVisible ? "Стороны света: Вкл" : "Стороны света: Выкл");
+        if (cardinalCubesVisible) {
+            Toast.makeText(requireContext(), "Синий — север, красный — восток, жёлтый — юг, зелёный — запад", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void updateCalibrationMarker(float nx, float ny) {
         if (calibrationMarker == null || getView() == null) return;
         int w = getView().getWidth();
@@ -496,7 +519,7 @@ public class BattleFragment extends Fragment {
         if (sensorProvider != null) sensorProvider.start();
         if (calibrationHandler == null) calibrationHandler = new Handler(Looper.getMainLooper());
         calibrationHandler.removeCallbacks(calibrationRunnable);
-        calibrationHandler.postDelayed(calibrationRunnable, CALIBRATION_INTERVAL_MS);
+        calibrationHandler.post(calibrationRunnable);
         if (frameProcessor != null) frameProcessor.resetTracker();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera();
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) locationManager.startLocationUpdates();
