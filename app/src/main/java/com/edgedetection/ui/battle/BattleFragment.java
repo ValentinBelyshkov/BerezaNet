@@ -87,7 +87,9 @@ public class BattleFragment extends Fragment {
     private TextView vitInfoText;
     private Button calibrateButton;
     private Button toggleEdgesButton;
-    private Button cardinalCubesButton;
+    private Button compassCubesButton;
+    private CompassCubeOverlay compassCubeOverlay;
+    private boolean compassCubesVisible = false;
     private TextView gpsWarning;
 
     // --- Simulation state ---
@@ -193,7 +195,14 @@ public class BattleFragment extends Fragment {
         vitInfoText = view.findViewById(R.id.vit_info);
         calibrateButton = view.findViewById(R.id.calibrate_button);
         toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
-        cardinalCubesButton = view.findViewById(R.id.cardinal_cubes_button);
+        compassCubesButton = view.findViewById(R.id.compass_cubes_button);
+        compassCubeOverlay = view.findViewById(R.id.compass_cube_overlay);
+
+        compassCubesButton.setOnClickListener(v -> {
+            compassCubesVisible = !compassCubesVisible;
+            compassCubeOverlay.setVisibility(compassCubesVisible ? View.VISIBLE : View.GONE);
+            compassCubesButton.setText(compassCubesVisible ? "Скрыть стороны" : "Стороны света");
+        });
 
         view.findViewById(R.id.fire_button).setOnClickListener(v -> {
             ballisticsManager.fireBullet(camForwardX, camForwardY, camForwardZ);
@@ -383,7 +392,8 @@ public class BattleFragment extends Fragment {
 
         sceneRenderer.updateOffscreenIndicator(fx, fy, fz, ux, uy, uz, getView());
 
-        if (bulletOverlay != null && sceneRenderer.getArRenderer() != null) {
+        if (sceneRenderer.getArRenderer() != null &&
+                (bulletOverlay != null || (compassCubeOverlay != null && compassCubesVisible))) {
             double[] viewMatDouble = new double[16];
             double[] projMatDouble = new double[16];
             sceneRenderer.getArRenderer().getCamera().getViewMatrix(viewMatDouble);
@@ -395,8 +405,13 @@ public class BattleFragment extends Fragment {
                 projMat[i] = (float) projMatDouble[i];
             }
             Viewport vp = sceneRenderer.getArRenderer().getViewport();
-            bulletOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
-            bulletOverlay.setBullets(ballisticsManager.getBullets());
+            if (bulletOverlay != null) {
+                bulletOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
+                bulletOverlay.setBullets(ballisticsManager.getBullets());
+            }
+            if (compassCubeOverlay != null && compassCubesVisible) {
+                compassCubeOverlay.setCameraMatrices(viewMat, projMat, vp.width, vp.height);
+            }
         }
 
         updateVITInfo();
