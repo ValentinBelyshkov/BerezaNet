@@ -97,6 +97,7 @@ public class Filament3DRenderer {
 
     private FilamentAsset mAsset;
     private boolean mModelLoaded = false;
+    private boolean mModelVisible = false; // [FIXED] отслеживаем состояние видимости
     private Skybox mSkybox;
     private Texture mSkyboxTexture;
 
@@ -123,9 +124,18 @@ public class Filament3DRenderer {
         if (transparent) {
             mView.setBlendMode(View.BlendMode.TRANSLUCENT);
             mScene.setSkybox(null);
+
+            // [FIXED] Прозрачный clear color — чтобы не было чёрного фона
+            Renderer.ClearOptions clearOptions = new Renderer.ClearOptions();
+           // clearOptions.clearColor = new double[0];
+            clearOptions.clear = true;
+            mRenderer.setClearOptions(clearOptions);
+
             if (surfaceView != null) {
                 surfaceView.setZOrderMediaOverlay(true);
                 surfaceView.getHolder().setFormat(android.graphics.PixelFormat.TRANSLUCENT);
+                // [FIXED] Прозрачный фон SurfaceView
+                surfaceView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
             }
         } else {
             mView.setBlendMode(View.BlendMode.OPAQUE);
@@ -187,7 +197,14 @@ public class Filament3DRenderer {
         public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
             Log.i(TAG, "surfaceChanged " + width + "x" + height);
             if (mDestroyed || mEngineDestroyed) return;
-            mView.setViewport(new Viewport(0, 0, width, height));
+
+            // [FIXED] Корректный viewport — предотвращает тайлинг/дублирование
+            if (width > 0 && height > 0) {
+                mView.setViewport(new Viewport(0, 0, width, height));
+                mAspectRatio = (float) width / Math.max(1, height);
+                mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, mFarPlane, Camera.Fov.VERTICAL);
+            }
+
             synchronized (mSwapChainLock) {
                 if (!mDestroyed && !mEngineDestroyed && mSwapChain == null) {
                     Surface surface = holder.getSurface();
@@ -225,6 +242,7 @@ public class Filament3DRenderer {
     public void loadModel(String assetPath) {
         if (mDestroyed || mEngineDestroyed) return;
         mModelLoaded = false;
+        mModelVisible = false;
         InputStream stream = null;
         try {
             stream = mContext.getAssets().open(assetPath);
@@ -246,7 +264,7 @@ public class Filament3DRenderer {
 
             mResourceLoader.loadResources(mAsset);
 
-            // ✅ ДИАГНОСТИКА: Проверяем структуру модели
+            // [FIXED] Диагностика модели
             int root = mAsset.getRoot();
             int[] allEntities = mAsset.getEntities();
             int[] renderables = mAsset.getRenderableEntities();
@@ -262,13 +280,9 @@ public class Filament3DRenderer {
                 }
             }
 
-            // ✅ ИСПРАВЛЕНО: Добавляем все entities (как было), но логируем
-            if (allEntities != null) {
-                for (int entity : allEntities) {
-                    mScene.addEntity(entity);
-                }
-                Log.i(TAG, "Added " + allEntities.length + " entities to scene");
-            }
+            // [FIXED] НЕ добавляем сущности в сцену здесь — делаем это через setModelVisible()
+            // чтобы избежать дублирования при повторном вызове setModelVisible(true)
+            Log.i(TAG, "Model loaded (entities NOT added to scene yet): " + assetPath);
 
             mModelCenter = mAsset.getBoundingBox().getCenter();
             float[] halfExtent = mAsset.getBoundingBox().getHalfExtent();
@@ -300,6 +314,7 @@ public class Filament3DRenderer {
 
     public void setModelVisible(boolean visible) {
         if (mAsset == null || mDestroyed || mEngineDestroyed) return;
+        if (mModelVisible == visible) return; // [FIXED] Предотвращаем лишние вызовы
 
         int[] entities = mAsset.getEntities();
         if (entities != null) {
@@ -311,6 +326,8 @@ public class Filament3DRenderer {
                 }
             }
         }
+        mModelVisible = visible;
+        Log.d(TAG, "setModelVisible: " + visible);
     }
 
     public Camera getCamera() {
@@ -441,7 +458,7 @@ public class Filament3DRenderer {
 
             mResourceLoader.loadResources(mSkyboxAsset);
 
-            // ✅ ИСПРАВЛЕНО: Добавляем ТОЛЬКО root entity
+            // Добавляем ТОЛЬКО root entity
             int root = mSkyboxAsset.getRoot();
             if (root != 0) {
                 mScene.addEntity(root);
@@ -530,7 +547,6 @@ public class Filament3DRenderer {
 
         TransformManager tm = mEngine.getTransformManager();
 
-        // ✅ ИСПРАВЛЕНО: Применяем трансформацию ТОЛЬКО к root
         int root = mSkyboxAsset.getRoot();
         if (root != 0) {
             int inst = tm.getInstance(root);
@@ -558,7 +574,7 @@ public class Filament3DRenderer {
                 mSwapChain = mEngine.createSwapChain(surface);
                 mView.setViewport(new Viewport(0, 0, width, height));
                 mAspectRatio = (float) width / Math.max(1, height);
-                mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, 1000.0, Camera.Fov.VERTICAL);
+                mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, mFarPlane, Camera.Fov.VERTICAL);
             } catch (Exception e) { Log.e(TAG, "attachSurface failed", e); }
         }
         if (mLifecycleResumed) startChoreographer();
