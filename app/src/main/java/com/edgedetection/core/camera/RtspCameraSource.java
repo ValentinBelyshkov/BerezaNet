@@ -17,18 +17,26 @@ import androidx.media3.exoplayer.rtsp.RtspMediaSource;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 
-
 public class RtspCameraSource implements CameraSource {
     private static final String TAG = "RtspCameraSource";
+
     private static final long FRAME_INTERVAL_MS = 33;
+    private static final long RECONNECT_DELAY_BASE_MS = 2_000;
+    private static final long RECONNECT_DELAY_MAX_MS = 30_000;
+    private static final long WATCHDOG_TIMEOUT_MS = 5_000;
 
     private final Context context;
     private final TextureView textureView;
     private final String rtspUrl;
+    private final Handler mainHandler;
 
     private ExoPlayer player;
     private CameraSourceListener listener;
     private volatile boolean isRunning = false;
+    private volatile boolean isConnected = false;
+
+    private int reconnectAttempt = 0;
+    private volatile long lastFrameTimeMs = 0;
 
     private HandlerThread frameThread;
     private Handler frameHandler;
@@ -43,6 +51,7 @@ public class RtspCameraSource implements CameraSource {
                     Mat rgba = bitmapToMat(bitmap);
                     bitmap.recycle();
                     if (rgba != null) {
+                        lastFrameTimeMs = System.currentTimeMillis();
                         listener.onFrameMat(rgba, System.nanoTime());
                     }
                 }
@@ -55,10 +64,41 @@ public class RtspCameraSource implements CameraSource {
         }
     };
 
+    private final Runnable watchdogRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isRunning) return;
+            if (isConnected && lastFrameTimeMs > 0) {
+                long sinceLastFrame = System.currentTimeMillis() - lastFrameTimeMs;
+                if (sinceLastFrame > WATCHDOG_TIMEOUT_MS) {
+                    Log.w(TAG, "Watchdog: no frames for " + sinceLastFrame + "ms — reconnecting");
+                    scheduleReconnect();
+                    return;
+                }
+            }
+            frameHandler.postDelayed(this, WATCHDOG_TIMEOUT_MS);
+        }
+    };
+
+    private final Runnable reconnectRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isRunning) return;
+            Log.i(TAG, "Reconnecting (attempt " + (reconnectAttempt + 1) + ")...");
+            mainHandler.post(() -> {
+                releasePlayer();
+                if (isRunning) {
+                    createPlayer();
+                }
+            });
+        }
+    };
+
     public RtspCameraSource(Context context, TextureView textureView, String rtspUrl) {
         this.context = context;
         this.textureView = textureView;
         this.rtspUrl = rtspUrl;
+        this.mainHandler = new Handler(context.getMainLooper());
     }
 
     @OptIn(markerClass = UnstableApi.class)
@@ -66,68 +106,108 @@ public class RtspCameraSource implements CameraSource {
     public void start(CameraSourceListener listener) {
         this.listener = listener;
         isRunning = true;
+        reconnectAttempt = 0;
+        lastFrameTimeMs = 0;
 
         frameThread = new HandlerThread("RtspFrameCapture");
         frameThread.start();
         frameHandler = new Handler(frameThread.getLooper());
 
-        new Handler(context.getMainLooper()).post(() -> {
-            if (!isRunning) return;
-            try {
-                player = new ExoPlayer.Builder(context).build();
-                player.setVideoTextureView(textureView);
+        mainHandler.post(this::createPlayer);
+    }
 
-                RtspMediaSource mediaSource = new RtspMediaSource.Factory()
-                        .createMediaSource(MediaItem.fromUri(rtspUrl));
+    @OptIn(markerClass = UnstableApi.class)
+    private void createPlayer() {
+        if (!isRunning) return;
+        try {
+            player = new ExoPlayer.Builder(context).build();
+            player.setVideoTextureView(textureView);
 
-                player.setMediaSource(mediaSource);
-                player.prepare();
-                player.setPlayWhenReady(true);
+            RtspMediaSource mediaSource = new RtspMediaSource.Factory()
+                    .createMediaSource(MediaItem.fromUri(rtspUrl));
 
-                player.addListener(new Player.Listener() {
-                    @Override
-                    public void onPlaybackStateChanged(int state) {
-                        if (state == Player.STATE_READY) {
-                            Log.i(TAG, "RTSP stream ready, starting frame capture");
-                            frameHandler.post(frameCaptureRunnable);
-                        } else if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) {
-                            Log.w(TAG, "RTSP player state: " + state);
+            player.setMediaSource(mediaSource);
+            player.prepare();
+            player.setPlayWhenReady(true);
+
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        Log.i(TAG, "RTSP stream ready");
+                        isConnected = true;
+                        reconnectAttempt = 0;
+                        lastFrameTimeMs = System.currentTimeMillis();
+                        frameHandler.removeCallbacks(frameCaptureRunnable);
+                        frameHandler.post(frameCaptureRunnable);
+                        frameHandler.removeCallbacks(watchdogRunnable);
+                        frameHandler.postDelayed(watchdogRunnable, WATCHDOG_TIMEOUT_MS);
+                    } else if (state == Player.STATE_ENDED) {
+                        Log.w(TAG, "RTSP stream ended — reconnecting");
+                        isConnected = false;
+                        scheduleReconnect();
+                    } else if (state == Player.STATE_IDLE) {
+                        if (isConnected) {
+                            Log.w(TAG, "RTSP player went idle — reconnecting");
+                            isConnected = false;
+                            scheduleReconnect();
                         }
                     }
+                }
 
-                    @Override
-                    public void onPlayerError(androidx.media3.common.PlaybackException error) {
-                        Log.e(TAG, "RTSP player error: " + error.getMessage());
-                    }
-                });
+                @Override
+                public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    Log.e(TAG, "RTSP error: " + error.getMessage());
+                    isConnected = false;
+                    scheduleReconnect();
+                }
+            });
 
-                Log.i(TAG, "RTSP stream connecting to: " + rtspUrl);
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to start RTSP player: " + e.getMessage(), e);
-            }
-        });
+            Log.i(TAG, "RTSP connecting to: " + rtspUrl);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create player: " + e.getMessage(), e);
+            scheduleReconnect();
+        }
+    }
+
+    private void scheduleReconnect() {
+        if (!isRunning) return;
+        frameHandler.removeCallbacks(frameCaptureRunnable);
+        frameHandler.removeCallbacks(watchdogRunnable);
+        frameHandler.removeCallbacks(reconnectRunnable);
+
+        long delay = Math.min(RECONNECT_DELAY_BASE_MS * (1L << reconnectAttempt), RECONNECT_DELAY_MAX_MS);
+        reconnectAttempt++;
+        Log.i(TAG, "Scheduling reconnect in " + delay + "ms (attempt " + reconnectAttempt + ")");
+        frameHandler.postDelayed(reconnectRunnable, delay);
+    }
+
+    private void releasePlayer() {
+        if (player != null) {
+            player.removeListener(player.getApplicationLooper() != null ? new Player.Listener() {} : new Player.Listener() {});
+            player.stop();
+            player.release();
+            player = null;
+        }
     }
 
     @Override
     public void stop() {
         isRunning = false;
+        isConnected = false;
         listener = null;
 
         if (frameHandler != null) {
             frameHandler.removeCallbacks(frameCaptureRunnable);
+            frameHandler.removeCallbacks(watchdogRunnable);
+            frameHandler.removeCallbacks(reconnectRunnable);
         }
         if (frameThread != null) {
             frameThread.quitSafely();
             frameThread = null;
         }
 
-        new Handler(context.getMainLooper()).post(() -> {
-            if (player != null) {
-                player.stop();
-                player.release();
-                player = null;
-            }
-        });
+        mainHandler.post(this::releasePlayer);
         Log.i(TAG, "RTSP camera source stopped");
     }
 
