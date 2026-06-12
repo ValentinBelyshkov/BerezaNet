@@ -35,6 +35,72 @@ public class BattleFrameProcessor {
         Log.i(TAG, "VIT Tracker init: " + vitOk);
     }
 
+    public void processFrameMat(Mat rgba, long frameTimestampNs, float lastGyroX, float lastGyroY, float lastGyroZ, long lastGyroTimestampNs, float pitch, float yaw, float roll) {
+        try {
+            int width = rgba.width();
+            int height = rgba.height();
+
+            if (vitTracker != null && VITTracker.isLibraryLoaded() && lastGyroTimestampNs > 0) {
+                int bufSize = width * height * 4;
+                ByteBuffer rgbaBuffer = ByteBuffer.allocateDirect(bufSize);
+                byte[] rgbaBytes = new byte[bufSize];
+                rgba.get(0, 0, rgbaBytes);
+                rgbaBuffer.put(rgbaBytes);
+                rgbaBuffer.position(0);
+                lastTargetState = vitTracker.processFrame(
+                        rgbaBuffer, width, height,
+                        frameTimestampNs,
+                        lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs,
+                        T_FLIGHT_SEC,
+                        pitch, yaw, roll
+                );
+            }
+
+            long currentTime = System.currentTimeMillis();
+            if (lastFrameTime != 0) {
+                double fps = 1000.0 / (currentTime - lastFrameTime);
+                viewModel.setFps(fps);
+            }
+            lastFrameTime = currentTime;
+
+            Mat edges = viewModel.getEdges();
+            if (edges == null || edges.width() != width || edges.height() != height) {
+                viewModel.initMats(width, height);
+                edges = viewModel.getEdges();
+            }
+
+            Boolean edgeEnabled = viewModel.isEdgeDetectionEnabled().getValue();
+            if (edgeEnabled == null) edgeEnabled = false;
+
+            Mat finalMat = (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) ? edges : rgba;
+
+            if (edgeEnabled && EdgeDetector.isLibraryLoaded() && edges != null) {
+                VITTracker.TargetState ts = lastTargetState;
+                EdgeDetector.detectEdgesWithReticle(
+                        rgba.getNativeObjAddr(),
+                        edges.getNativeObjAddr(),
+                        50, 150, 5,
+                        ts.detected ? Math.round(ts.bboxX + ts.bboxW / 2f) : 0,
+                        ts.detected ? Math.round(ts.bboxY + ts.bboxH / 2f) : 0,
+                        ts.detected,
+                        false
+                );
+            }
+
+            drawCenterRedDot(finalMat);
+
+            if (vitTracker != null) {
+                vitTracker.drawOverlay(finalMat, lastTargetState, pitch, yaw, roll, lastGyroX, lastGyroY, lastGyroZ);
+            }
+
+            if (glView != null) glView.updateFrame(finalMat);
+
+            rgba.release();
+        } catch (Exception e) {
+            Log.e(TAG, "processFrameMat error: " + e.getMessage(), e);
+        }
+    }
+
     public void processFrame(ImageProxy image, float lastGyroX, float lastGyroY, float lastGyroZ, long lastGyroTimestampNs, float pitch, float yaw, float roll) {
         try {
             int width = image.getWidth();

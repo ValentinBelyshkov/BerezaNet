@@ -9,9 +9,12 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.view.Choreographer;
 import android.view.LayoutInflater;
 import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -35,6 +38,7 @@ import com.edgedetection.core.camera.CameraManager;
 import com.edgedetection.core.camera.CameraSource;
 import com.edgedetection.core.camera.ExternalCameraSource;
 import com.edgedetection.core.camera.InternalCameraSource;
+import com.edgedetection.core.camera.RtspCameraSource;
 import com.edgedetection.domain.ballistics.CalibrationPoint;
 import com.edgedetection.domain.mission.Mission;
 import com.edgedetection.jni.VITTracker;
@@ -82,9 +86,13 @@ public class BattleFragment extends Fragment {
     private volatile float lastPitch = 0f, lastYaw = 0f, lastRoll = 0f;
     private long lastLogTime = 0;
 
+    private static final String PREFS_CAMERA = "camera_prefs";
+    private static final String KEY_RTSP_URL = "rtsp_url";
+
     // --- Views ---
     private EdgeDetectionGLView glView;
     private PreviewView previewView;
+    private TextureView rtspTextureView;
     private BulletTrajectoryView bulletOverlay;
     private ImageView calibrationMarker;
     private TextView vitInfoText;
@@ -198,6 +206,7 @@ public class BattleFragment extends Fragment {
     private void initViews(View view) {
         previewView = view.findViewById(R.id.preview_view);
         previewView.setVisibility(View.INVISIBLE);
+        rtspTextureView = view.findViewById(R.id.rtsp_texture_view);
         glView = view.findViewById(R.id.camera_view);
         gpsWarning = view.findViewById(R.id.gps_warning);
         bulletOverlay = view.findViewById(R.id.bullet_overlay);
@@ -234,7 +243,13 @@ public class BattleFragment extends Fragment {
         view.findViewById(R.id.switch_camera_button).setOnClickListener(v -> {
             if (cameraManager != null) {
                 cameraManager.toggleSource();
-                Toast.makeText(requireContext(), "Переключение камеры...", Toast.LENGTH_SHORT).show();
+                CameraSource current = cameraManager.getCurrentSource().getValue();
+                boolean isRtsp = current instanceof RtspCameraSource;
+                Toast.makeText(requireContext(),
+                        isRtsp ? "Камера: RTSP" : "Камера: встроенная",
+                        Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(requireContext(), "Камера не инициализирована", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -368,18 +383,52 @@ public class BattleFragment extends Fragment {
 
         if (cameraManager == null) {
             CameraSource internal = new InternalCameraSource(requireContext(), getViewLifecycleOwner(), previewView, cameraExecutor);
-            CameraSource external = new ExternalCameraSource();
+
+            SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_CAMERA, Context.MODE_PRIVATE);
+            String rtspUrl = prefs.getString(KEY_RTSP_URL, "");
+            CameraSource external;
+            if (rtspUrl != null && !rtspUrl.isEmpty()) {
+                external = new RtspCameraSource(requireContext(), rtspTextureView, rtspUrl);
+            } else {
+                external = new ExternalCameraSource();
+            }
+
             cameraManager = new CameraManager(internal, external);
+
+            CameraSource.CameraSourceListener listener = new CameraSource.CameraSourceListener() {
+                @Override
+                public void onFrame(androidx.camera.core.ImageProxy image) {
+                    frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll);
+                }
+
+                @Override
+                public void onFrameMat(org.opencv.core.Mat rgba, long timestampNs) {
+                    frameProcessor.processFrameMat(rgba, timestampNs, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll);
+                }
+            };
 
             cameraManager.getCurrentSource().observe(getViewLifecycleOwner(), source -> {
                 if (source != null) {
-                    source.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
+                    source.start(listener);
                 }
             });
         } else {
             CameraSource current = cameraManager.getCurrentSource().getValue();
             if (current != null && !current.isRunning()) {
-                current.start(image -> frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll));
+                SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_CAMERA, Context.MODE_PRIVATE);
+                String rtspUrl = prefs.getString(KEY_RTSP_URL, "");
+                CameraSource.CameraSourceListener listener = new CameraSource.CameraSourceListener() {
+                    @Override
+                    public void onFrame(androidx.camera.core.ImageProxy image) {
+                        frameProcessor.processFrame(image, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll);
+                    }
+
+                    @Override
+                    public void onFrameMat(org.opencv.core.Mat rgba, long timestampNs) {
+                        frameProcessor.processFrameMat(rgba, timestampNs, lastGyroX, lastGyroY, lastGyroZ, lastGyroTimestampNs, lastPitch, lastYaw, lastRoll);
+                    }
+                };
+                current.start(listener);
             }
         }
     }

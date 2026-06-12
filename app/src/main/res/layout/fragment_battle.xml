@@ -9,6 +9,12 @@ android:layout_height="match_parent">
     android:layout_height="1dp"
     android:visibility="invisible" />
 
+<TextureView
+    android:id="@+id/rtsp_texture_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="invisible" />
+
 <com.edgedetection.opengl.EdgeDetectionGLView
     android:id="@+id/camera_view"
     android:layout_width="match_parent"
