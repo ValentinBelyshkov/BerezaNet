@@ -45,6 +45,7 @@ import com.edgedetection.ui.battle.components.BattleLocationManager;
 import com.edgedetection.ui.battle.components.BattleLogger;
 import com.edgedetection.ui.battle.components.BattleSceneRenderer;
 import com.edgedetection.ui.battle.components.BattleSensorProvider;
+import com.edgedetection.ui.shared.MissionIntent;
 import com.edgedetection.ui.shared.MissionViewModel;
 import com.google.android.filament.Viewport;
 
@@ -56,9 +57,10 @@ import java.util.concurrent.Executors;
 public class BattleFragment extends Fragment {
     private static final String TAG = "BattleFragment";
     private static final int AR_PERMISSION_REQUEST = 3;
-    private static final float TARGET_WIDTH_M = 2.0f;
-    private static final float TARGET_LENGTH_M = 4.0f;
+    private static final float TARGET_WIDTH_M = 3.09f;
+    private static final float TARGET_LENGTH_M = 2.86f;
     private static final long CALIBRATION_INTERVAL_MS = 5000;
+    private static final float LEAD_TIME_SEC = 2.0f;
 
     // --- Components ---
     private BattleSensorProvider sensorProvider;
@@ -69,6 +71,7 @@ public class BattleFragment extends Fragment {
 
     // --- State ---
     private BattleViewModel viewModel;
+    private MissionViewModel missionVm;
     private CameraManager cameraManager;
     private ExecutorService cameraExecutor;
     private Handler imuHandler;
@@ -90,6 +93,7 @@ public class BattleFragment extends Fragment {
     private Button compassCubesButton;
     private CompassCubeOverlay compassCubeOverlay;
     private boolean compassCubesVisible = false;
+    private Button simulationButton;
     private TextView gpsWarning;
 
     // --- Simulation state ---
@@ -131,6 +135,7 @@ public class BattleFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(this).get(BattleViewModel.class);
+        missionVm = new ViewModelProvider(requireActivity()).get(MissionViewModel.class);
         choreographer = Choreographer.getInstance();
 
         HandlerThread imuThread = new HandlerThread("IMU");
@@ -195,7 +200,20 @@ public class BattleFragment extends Fragment {
         calibrateButton = view.findViewById(R.id.calibrate_button);
         toggleEdgesButton = view.findViewById(R.id.toggle_edges_button);
         compassCubesButton = view.findViewById(R.id.compass_cubes_button);
+        simulationButton = view.findViewById(R.id.simulation_button);
         compassCubeOverlay = view.findViewById(R.id.compass_cube_overlay);
+
+        simulationButton.setOnClickListener(v -> {
+            Mission currentMission = missionVm.getMissionState().getValue();
+            Mission.SimulationState state = currentMission != null ? currentMission.simState : Mission.SimulationState.IDLE;
+            if (state == Mission.SimulationState.RUNNING) {
+                missionVm.dispatch(new MissionIntent.PauseSimulation());
+            } else if (state == Mission.SimulationState.PAUSED) {
+                missionVm.dispatch(new MissionIntent.StartSimulation());
+            } else {
+                missionVm.dispatch(new MissionIntent.StartSimulation());
+            }
+        });
 
         compassCubesButton.setOnClickListener(v -> {
             compassCubesVisible = !compassCubesVisible;
@@ -266,7 +284,21 @@ public class BattleFragment extends Fragment {
             }
         });
 
-        MissionViewModel missionVm = new ViewModelProvider(requireActivity()).get(MissionViewModel.class);
+        missionVm.getMissionState().observe(getViewLifecycleOwner(), mission -> {
+            if (mission != null && simulationButton != null) {
+                switch (mission.simState) {
+                    case RUNNING:
+                        simulationButton.setText("Пауза симуляции");
+                        break;
+                    case PAUSED:
+                        simulationButton.setText("Продолжить");
+                        break;
+                    default:
+                        simulationButton.setText("Старт симуляции");
+                        break;
+                }
+            }
+        });
         missionVm.getMissionState().observe(getViewLifecycleOwner(), mission -> {
             if (mission == null) return;
             if (mission.originLatitude != null && mission.originLongitude != null) {
@@ -372,7 +404,43 @@ public class BattleFragment extends Fragment {
             refLat = 0; refLon = 0; refAlt = 0;
         }
 
-        sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
+sceneRenderer.updateDronePosition(refLat, refLon, refAlt, droneLat, droneLon, droneAlt, droneHeading, simulationActive, hasDronePosition);
+        // --- Drone velocity + lead point ---
+        if (simulationActive && hasDronePosition && sceneRenderer.hasRelativePosition()) {
+            float cx = sceneRenderer.getLastDroneX();
+            float cy = sceneRenderer.getLastDroneY();
+            float cz = sceneRenderer.getLastDroneZ();
+            long nowMs = System.currentTimeMillis();
+            if (!hasPrevDroneFilPos) {
+                prevDroneFilX = cx; prevDroneFilY = cy; prevDroneFilZ = cz;
+                prevDroneFilTimeMs = nowMs;
+                hasPrevDroneFilPos = true;
+            } else {
+                float dtSec = (nowMs - prevDroneFilTimeMs) / 1000f;
+                float ddx = cx - prevDroneFilX;
+                float ddy = cy - prevDroneFilY;
+                float ddz = cz - prevDroneFilZ;
+                if (dtSec >= 0.05f && (ddx*ddx + ddy*ddy + ddz*ddz) > 1e-6f) {
+                    droneVelFilX = ddx / dtSec;
+                    droneVelFilY = ddy / dtSec;
+                    droneVelFilZ = ddz / dtSec;
+                    prevDroneFilX = cx; prevDroneFilY = cy; prevDroneFilZ = cz;
+                    prevDroneFilTimeMs = nowMs;
+                }
+            }
+            if (bulletOverlay != null) {
+                bulletOverlay.setLeadPoint(
+                    sceneRenderer.getLastDroneX() + droneVelFilX * LEAD_TIME_SEC,
+                    sceneRenderer.getLastDroneY() + droneVelFilY * LEAD_TIME_SEC,
+                    sceneRenderer.getLastDroneZ() + droneVelFilZ * LEAD_TIME_SEC,
+                    true
+                );
+            }
+        } else {
+            hasPrevDroneFilPos = false;
+            droneVelFilX = 0; droneVelFilY = 0; droneVelFilZ = 0;
+            if (bulletOverlay != null) bulletOverlay.setLeadPoint(0, 0, 0, false);
+        }
 
         long now = System.currentTimeMillis();
         if (now - lastLogTime > 1000 && sceneRenderer.hasRelativePosition()) {

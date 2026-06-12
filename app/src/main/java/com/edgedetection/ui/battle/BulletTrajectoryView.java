@@ -26,6 +26,18 @@ public class BulletTrajectoryView extends View {
     private int screenW, screenH;
     private boolean hasMatrices = false;
 
+    // --- Lead point (точка упреждения) ---
+    private float leadWorldX, leadWorldY, leadWorldZ;
+    private boolean leadPointVisible = false;
+    private final Paint leadPaint;
+    private static final float LEAD_SQUARE_SIZE = 20f;
+
+    {
+        leadPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        leadPaint.setColor(0xFFFFFF00); // жёлтый заполненный
+        leadPaint.setStyle(Paint.Style.FILL);
+    }
+
     public BulletTrajectoryView(Context context) { super(context); init(); }
     public BulletTrajectoryView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
 
@@ -44,6 +56,16 @@ public class BulletTrajectoryView extends View {
         hitPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         hitPaint.setColor(Color.GREEN);
         hitPaint.setStyle(Paint.Style.FILL);
+    }
+
+    public void setLeadPoint(float worldX, float worldY, float worldZ, boolean visible) {
+        synchronized (this) {
+            leadWorldX = worldX;
+            leadWorldY = worldY;
+            leadWorldZ = worldZ;
+            leadPointVisible = visible;
+        }
+        invalidate();
     }
 
     public void setCameraMatrices(float[] view, float[] proj, int w, int h) {
@@ -111,6 +133,22 @@ public class BulletTrajectoryView extends View {
                         canvas.drawCircle(s[0], s[1], 18f, hitPaint);
                     }
                 }
+            }
+        }
+
+        // Точка упреждения (жёлтый квадрат)
+        boolean showLead;
+        float lx, ly, lz;
+        synchronized (this) {
+            showLead = leadPointVisible;
+            lx = leadWorldX; ly = leadWorldY; lz = leadWorldZ;
+        }
+        if (showLead && hasMatrices && screenW > 0) {
+            float[] s = worldToScreen(new float[]{lx, ly, lz}, w, h);
+            if (s[2] > 0) {
+                canvas.drawRect(s[0] - LEAD_SQUARE_SIZE, s[1] - LEAD_SQUARE_SIZE,
+                                s[0] + LEAD_SQUARE_SIZE, s[1] + LEAD_SQUARE_SIZE,
+                                leadPaint);
             }
         }
     }
