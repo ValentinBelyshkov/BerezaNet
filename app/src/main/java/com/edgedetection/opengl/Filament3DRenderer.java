@@ -263,12 +263,15 @@ public class Filament3DRenderer {
                 }
             }
 
-            // ✅ ИСПРАВЛЕНО: Добавляем все entities (как было), но логируем
-            if (allEntities != null) {
-                for (int entity : allEntities) {
-                    mScene.addEntity(entity);
+            // ✅ ИСПРАВЛЕНО: Добавляем ТОЛЬКО root entity, чтобы избежать дублирования и шахматной/тайлинговой сетки
+            if (root != 0) {
+                mScene.addEntity(root);
+                Log.i(TAG, "Drone root entity added to scene: " + root);
+            } else {
+                if (allEntities != null && allEntities.length > 0) {
+                    mScene.addEntity(allEntities[0]);
+                    Log.w(TAG, "Drone root is 0, using first entity: " + allEntities[0]);
                 }
-                Log.i(TAG, "Added " + allEntities.length + " entities to scene");
             }
 
             mModelCenter = mAsset.getBoundingBox().getCenter();
@@ -304,13 +307,20 @@ public class Filament3DRenderer {
         if (mAsset == null || mDestroyed || mEngineDestroyed) return;
         if (mModelVisible == visible) return;
 
-        int[] entities = mAsset.getEntities();
-        if (entities != null) {
-            for (int entity : entities) {
+        int root = mAsset.getRoot();
+        if (root != 0) {
+            if (visible) {
+                mScene.addEntity(root);
+            } else {
+                mScene.removeEntity(root);
+            }
+        } else {
+            int[] entities = mAsset.getEntities();
+            if (entities != null && entities.length > 0) {
                 if (visible) {
-                    mScene.addEntity(entity);
+                    mScene.addEntity(entities[0]);
                 } else {
-                    mScene.removeEntity(entity);
+                    mScene.removeEntity(entities[0]);
                 }
             }
         }
@@ -681,10 +691,13 @@ public class Filament3DRenderer {
 
             if (mAsset != null) {
                 try {
-                    int[] entities = mAsset.getEntities();
-                    if (entities != null) {
-                        for (int entity : entities) {
-                            mScene.removeEntity(entity);
+                    int root = mAsset.getRoot();
+                    if (root != 0) {
+                        mScene.removeEntity(root);
+                    } else {
+                        int[] entities = mAsset.getEntities();
+                        if (entities != null && entities.length > 0) {
+                            mScene.removeEntity(entities[0]);
                         }
                     }
                     mAssetLoader.destroyAsset(mAsset);
