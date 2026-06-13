@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Bullet {
-    public final float[] pos = new float[3];
-    public final float[] vel = new float[3];
+    public final float[] pos     = new float[3];
+    /** Позиция ДО последнего update() — используется для CCD swept-sphere проверки */
+    public final float[] prevPos = new float[3];
+    public final float[] vel     = new float[3];
     public final List<float[]> trail = new ArrayList<>();
     public boolean active = true;
     public boolean hit = false;
@@ -35,6 +37,12 @@ public class Bullet {
             active = false;
             return;
         }
+
+        // Сохраняем позицию ДО перемещения (нужно для CCD swept-sphere проверки)
+        prevPos[0] = pos[0];
+        prevPos[1] = pos[1];
+        prevPos[2] = pos[2];
+
         float vSq = vel[0]*vel[0] + vel[1]*vel[1] + vel[2]*vel[2];
         float v = (float)Math.sqrt(vSq);
         if (v > 0.001f) {

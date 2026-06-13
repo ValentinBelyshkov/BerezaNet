@@ -207,9 +207,29 @@ public class BattleSceneRenderer {
     public void setModelScale(float targetSizeM) {
         if (arRenderer == null) return;
         float naturalRadius = arRenderer.getModelRadius();
+        Log.w("SCALE_DEBUG", "╔═══════════════════════════════════════════╗");
+        Log.w("SCALE_DEBUG", "║          setModelScale called             ║");
+        Log.w("SCALE_DEBUG", "║ targetSizeM (диаметр цели): " + targetSizeM + " м");
+        Log.w("SCALE_DEBUG", "║ naturalRadius (из GLB bbox): " + naturalRadius + " м");
         if (naturalRadius > 0.001f) {
+            // Нормализуем по максимальной оси — если модель 6м по X при импорте,
+            // а нужен 1м, то scale = (1/2) / (6/2) = 1/6.
+            // effectiveRadius после scale = naturalRadius * scale = targetSizeM/2
             float scale = (targetSizeM / 2f) / naturalRadius;
+            float effectiveDiameter = naturalRadius * scale * 2f;
+            Log.w("SCALE_DEBUG", "║ scale = (targetSizeM/2) / naturalRadius");
+            Log.w("SCALE_DEBUG", "║      = (" + targetSizeM + "/2) / " + naturalRadius + " = " + scale);
+            Log.w("SCALE_DEBUG", "║ effectiveRadius = " + (naturalRadius * scale) + " м");
+            Log.w("SCALE_DEBUG", "║ effectiveDiameter = " + effectiveDiameter + " м  [должен = " + targetSizeM + " м]");
+            if (Math.abs(effectiveDiameter - targetSizeM) > 0.01f) {
+                Log.e("SCALE_DEBUG", "║ !!! НЕСООТВЕТСТВИЕ ДИАМЕТРА !!!");
+            } else {
+                Log.w("SCALE_DEBUG", "║ Диаметр совпадает — ОК");
+            }
             arRenderer.setDroneScale(scale);
+        } else {
+            Log.e("SCALE_DEBUG", "║ !!! naturalRadius слишком мал: " + naturalRadius + " — scale не применён");
         }
+        Log.w("SCALE_DEBUG", "╚═══════════════════════════════════════════╝");
     }
 }

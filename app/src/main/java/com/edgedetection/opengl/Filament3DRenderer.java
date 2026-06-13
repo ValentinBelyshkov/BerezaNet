@@ -107,10 +107,22 @@ public class Filament3DRenderer {
 
     public void setDroneScale(float scale) {
         mDroneScale = Math.max(0.01f, scale);
+        Log.w("SCALE_DEBUG", "setDroneScale: scale=" + scale
+                + "  effectiveRadius=" + (mModelRadius * mDroneScale) + " m");
     }
+
+    public float getDroneScale() { return mDroneScale; }
 
     public float getEffectiveModelRadius() {
         return mModelRadius * mDroneScale;
+    }
+
+    public void setFovDegrees(float fov) {
+        mFovDegrees = Math.max(10f, Math.min(120f, fov));
+        if (!mDestroyed && !mEngineDestroyed) {
+            mCamera.setProjection(mFovDegrees, mAspectRatio, 0.1, mFarPlane, Camera.Fov.VERTICAL);
+        }
+        Log.w("SCALE_DEBUG", "setFovDegrees: " + mFovDegrees + "°");
     }
 
     public Filament3DRenderer(Context context, SurfaceView surfaceView) {
@@ -298,6 +310,34 @@ public class Filament3DRenderer {
             float maxExtent = Math.max(halfExtent[0], Math.max(halfExtent[1], halfExtent[2]));
             mModelRadius = maxExtent;
             float distance = maxExtent * 3.0f;
+
+            // ====== SCALE_DEBUG: критически важные логи ======
+            Log.w("SCALE_DEBUG", "╔══════════════════════════════════════════════╗");
+            Log.w("SCALE_DEBUG", "║         MODEL BOUNDING BOX (GLB units)       ║");
+            Log.w("SCALE_DEBUG", "╠══════════════════════════════════════════════╣");
+            Log.w("SCALE_DEBUG", "║ halfExtent X = " + halfExtent[0]);
+            Log.w("SCALE_DEBUG", "║ halfExtent Y = " + halfExtent[1]);
+            Log.w("SCALE_DEBUG", "║ halfExtent Z = " + halfExtent[2]);
+            Log.w("SCALE_DEBUG", "║ center       = [" + mModelCenter[0] + ", " + mModelCenter[1] + ", " + mModelCenter[2] + "]");
+            Log.w("SCALE_DEBUG", "║ naturalRadius (max half-extent) = " + mModelRadius);
+            Log.w("SCALE_DEBUG", "╠══════════════════════════════════════════════╣");
+            if (mModelRadius > 50f) {
+                Log.e("SCALE_DEBUG", "║ !!! ВЕРОЯТНО GLB ЭКСПОРТИРОВАН В САНТИМЕТРАХ !!!");
+                Log.e("SCALE_DEBUG", "║ naturalRadius=" + mModelRadius + " — похоже на " + (mModelRadius/100f) + " м");
+                Log.e("SCALE_DEBUG", "║ Переэкспортируй GLB в метрах (Blender: Apply Scale)");
+            } else if (mModelRadius < 0.001f) {
+                Log.e("SCALE_DEBUG", "║ !!! МОДЕЛЬ СЛИШКОМ МАЛЕНЬКАЯ: " + mModelRadius + " !!!");
+            } else {
+                Log.w("SCALE_DEBUG", "║ Размер в метрах — ОК");
+            }
+            Log.w("SCALE_DEBUG", "╠══════════════════════════════════════════════╣");
+            Log.w("SCALE_DEBUG", "║ МАТЕМАТИКА: для цели S метров:");
+            Log.w("SCALE_DEBUG", "║   scale = (S/2) / naturalRadius");
+            Log.w("SCALE_DEBUG", "║   effectiveRadius = S/2  [= половина целевого размера]");
+            Log.w("SCALE_DEBUG", "║ ЭКРАН: R_px = (H/2) * effectiveRadius / (dist * tan(FOV/2))");
+            Log.w("SCALE_DEBUG", "║   при S=2м, dist=50м, FOV=45°, H=1920px:");
+            Log.w("SCALE_DEBUG", "║   R_px = 960 * 1 / (50 * 0.4142) = " + String.format("%.1f", 960f/(50f*0.4142f)) + " px");
+            Log.w("SCALE_DEBUG", "╚══════════════════════════════════════════════╝");
 
             mCamera.lookAt(
                     mModelCenter[0], mModelCenter[1] + distance, mModelCenter[2] + distance,
@@ -604,10 +644,20 @@ public class Filament3DRenderer {
         TransformManager tm = mEngine.getTransformManager();
         float sc = mDroneScale;
         float c = (float) Math.cos(heading), s = (float) Math.sin(heading);
+
+        // Компенсируем смещение центра модели в model-space, чтобы визуальный центр
+        // совпадал с GPS-точкой (x,y,z), вокруг которой строится коллизионная сфера.
+        // Без этого модель может быть смещена относительно сферы.
+        float cx = mModelCenter[0], cy = mModelCenter[1], cz = mModelCenter[2];
+        // Вращаем центр модели (в плоскости XZ — heading) и масштабируем, затем вычитаем
+        float tx = x - sc * ( c * cx + s * cz);
+        float ty = y - sc * cy;
+        float tz = z - sc * (-s * cx + c * cz);
+
         float[] m = new float[16];
-        m[0] = sc*c;  m[4] = 0;  m[8]  = sc*s;  m[12] = x;
-        m[1] = 0;     m[5] = sc; m[9]  = 0;      m[13] = y;
-        m[2] = -sc*s; m[6] = 0;  m[10] = sc*c;   m[14] = z;
+        m[0] = sc*c;  m[4] = 0;  m[8]  = sc*s;  m[12] = tx;
+        m[1] = 0;     m[5] = sc; m[9]  = 0;      m[13] = ty;
+        m[2] = -sc*s; m[6] = 0;  m[10] = sc*c;   m[14] = tz;
         m[3] = 0;     m[7] = 0;  m[11] = 0;       m[15] = 1;
 
         int root = mAsset.getRoot();

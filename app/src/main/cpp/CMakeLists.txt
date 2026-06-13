@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project(edge_detection)
 
-# Set C++ standard (C++17 for VIT)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -10,9 +9,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(OpenCV_DIR "C:/OpenCV-android-sdk/sdk/native/jni")
 find_package(OpenCV REQUIRED)
 
-# ======== Legacy edge detection library ========
+# ======== Main library: edge detection + RTSP decoder ========
 add_library(edge_detection SHARED
-        edge_detection.cpp)
+        edge_detection.cpp
+        rtsp_decoder.cpp)
 
 target_link_libraries(edge_detection
         ${OpenCV_LIBS}

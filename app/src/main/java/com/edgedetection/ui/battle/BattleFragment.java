@@ -12,8 +12,7 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.Choreographer;
 import android.view.LayoutInflater;
-import android.view.SurfaceView;
-import android.view.TextureView;
+
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -37,6 +36,7 @@ import com.edgedetection.core.camera.CameraManager;
 import com.edgedetection.core.camera.CameraSource;
 import com.edgedetection.core.camera.InternalCameraSource;
 import com.edgedetection.core.camera.RtspCameraSource;
+import com.alexvas.rtsp.widget.RtspSurfaceView;
 import com.edgedetection.domain.ballistics.CalibrationPoint;
 import com.edgedetection.domain.mission.Mission;
 import com.edgedetection.jni.VITTracker;
@@ -91,8 +91,9 @@ public class BattleFragment extends Fragment {
 
     // --- Views ---
     private EdgeDetectionGLView glView;
-    private PreviewView previewView;
-    private TextureView rtspTextureView;
+    private PreviewView         previewView;
+    private RtspSurfaceView     rtspSurfaceView;
+
     private BulletTrajectoryView bulletOverlay;
     private ThermalOverlayView thermalOverlay;
     private Button thermalButton;
@@ -228,9 +229,10 @@ public class BattleFragment extends Fragment {
     }
 
     private void initViews(View view) {
-        previewView = view.findViewById(R.id.preview_view);
+        previewView     = view.findViewById(R.id.preview_view);
+        rtspSurfaceView = view.findViewById(R.id.rtsp_surface_view);
         previewView.setVisibility(View.INVISIBLE);
-        rtspTextureView = view.findViewById(R.id.rtsp_texture_view);
+
         glView = view.findViewById(R.id.camera_view);
         gpsWarning = view.findViewById(R.id.gps_warning);
         bulletOverlay = view.findViewById(R.id.bullet_overlay);
@@ -434,7 +436,7 @@ public class BattleFragment extends Fragment {
         if (cameraManager == null) {
             CameraSource internal = new InternalCameraSource(requireContext(), getViewLifecycleOwner(), previewView, cameraExecutor);
 
-            RtspCameraSource rtspSource = new RtspCameraSource(requireContext(), rtspTextureView, RTSP_URL);
+            RtspCameraSource rtspSource = new RtspCameraSource(rtspSurfaceView, RTSP_URL);
             rtspSource.setStatusListener((status, attempt) -> updateRtspStatus(status, attempt));
 
             cameraManager = new CameraManager(internal, rtspSource);
@@ -444,6 +446,7 @@ public class BattleFragment extends Fragment {
                 if (rtspStatusView != null) {
                     rtspStatusView.setVisibility(isRtsp ? View.VISIBLE : View.GONE);
                 }
+                updateRtspViewVisibility(isRtsp);
             });
 
             CameraSource.CameraSourceListener listener = new CameraSource.CameraSourceListener() {
@@ -480,6 +483,12 @@ public class BattleFragment extends Fragment {
                 current.start(listener);
             }
         }
+    }
+
+    private void updateRtspViewVisibility(boolean isRtsp) {
+        // Frames from C++ decoder feed directly into glView via processFrameMat.
+        // No TextureView or extra SurfaceView needed — glView stays visible always.
+        if (glView != null) glView.setVisibility(View.VISIBLE);
     }
 
     private void updateRtspStatus(RtspCameraSource.Status status, int attempt) {

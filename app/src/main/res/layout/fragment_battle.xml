@@ -9,11 +9,14 @@
         android:layout_height="1dp"
         android:visibility="invisible" />
 
-    <TextureView
-        android:id="@+id/rtsp_texture_view"
+    <!-- RTSP: декодирует H264 через MediaCodec; позиционирован ЗА glView.
+         VISIBLE когда RTSP активен — нужно для PixelCopy.
+         Пользователь не видит этот слой (glView сверху). -->
+    <com.alexvas.rtsp.widget.RtspSurfaceView
+        android:id="@+id/rtsp_surface_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="invisible" />
+        android:visibility="gone" />
 
     <com.edgedetection.opengl.EdgeDetectionGLView
         android:id="@+id/camera_view"
